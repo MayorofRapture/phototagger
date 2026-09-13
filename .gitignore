@@ -1,0 +1,8 @@
+node_modules/
+.webpack/
+out/
+Collection/
+*.log
+.DS_Store
+coverage/
+dist/
