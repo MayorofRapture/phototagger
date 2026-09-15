@@ -1,4 +1,5 @@
 import type { ModuleOptions } from 'webpack';
+import MiniCssExtractPlugin from 'mini-css-extract-plugin';
 
 export const rules: Required<ModuleOptions>['rules'] = [
   {
@@ -21,6 +22,6 @@ export const rules: Required<ModuleOptions>['rules'] = [
   },
   {
     test: /\.css$/,
-    use: ['style-loader', 'css-loader'],
+    use: [MiniCssExtractPlugin.loader, 'css-loader'],
   },
 ];

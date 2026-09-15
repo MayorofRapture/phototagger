@@ -1,25 +1,43 @@
-import { session, BrowserWindow } from 'electron';
+import { app, session, BrowserWindow } from 'electron';
 
 export function configureSecurityPolicies(): void {
+  const isDevelopment = !app.isPackaged;
+  const contentSecurityPolicy = isDevelopment
+    ? [
+        "default-src 'none'",
+        "script-src 'self' 'unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' pt-photo: data:",
+        "font-src 'self'",
+        "connect-src 'self' http://localhost:* ws://localhost:*",
+        "media-src 'none'",
+        "object-src 'none'",
+        "frame-src 'none'",
+        "worker-src 'self'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; ')
+    : [
+        "default-src 'none'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "img-src 'self' pt-photo: data:",
+        "font-src 'self'",
+        "connect-src 'none'",
+        "media-src 'none'",
+        "object-src 'none'",
+        "frame-src 'none'",
+        "worker-src 'self'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; ');
+
   // Enforce Content Security Policy header
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'none'; " +
-            "script-src 'self'; " +
-            "style-src 'self'; " +
-            "img-src 'self' pt-photo: data:; " +
-            "font-src 'self'; " +
-            "connect-src 'none'; " +
-            "media-src 'none'; " +
-            "object-src 'none'; " +
-            "frame-src 'none'; " +
-            "worker-src 'self'; " +
-            "base-uri 'none'; " +
-            "form-action 'none';"
-        ],
+        'Content-Security-Policy': [contentSecurityPolicy],
       },
     });
   });

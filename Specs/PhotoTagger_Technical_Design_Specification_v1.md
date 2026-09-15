@@ -277,10 +277,11 @@ No renderer module may import from <code>main</code>, <code>catalog</code>, <cod
 | Electron | 44.3.0 |
 | Bundled Node.js | 24.20.0 |
 | Bundled Chromium | 152.0.7977.78 |
-| npm used for reproducible install | 12.0.2 |
+| npm used for reproducible install | 11.19.0 |
 | Electron Forge packages | 7.11.2 |
 | Webpack | 5.110.3 |
-| TypeScript | 7.0.2 |
+| TypeScript | 5.4.5 |
+| mini-css-extract-plugin | 2.9.4 |
 | React / React DOM | 19.3.0 |
 | TanStack React Virtual | 3.14.12 |
 | better-sqlite3 | 13.0.3 |
@@ -297,7 +298,7 @@ No renderer module may import from <code>main</code>, <code>catalog</code>, <cod
 
 All direct dependencies use exact versions in <code>package.json</code>. <code>package-lock.json</code> version 3 is committed. CI and release builds use <code>npm ci</code>. Native packages are built or selected for Electron 44.3.0 and Windows x64 and are verified from the packaged output, not only from the development tree.
 
-Webpack emits four privileged entry artifacts—<code>main.js</code>, <code>catalog-process.js</code>, <code>image-process.js</code>, and <code>preload.js</code>—plus the renderer assets. The first three target Electron's main/Node environment, preload targets the isolated preload environment, and renderer targets the web platform. better-sqlite3 and Sharp native binaries are externalized from JavaScript bundling and resolved from verified ASAR-unpacked package paths. Production source maps are not shipped, and no runtime entry point loads code from Collection.
+Webpack emits four privileged entry artifacts—<code>main.js</code>, <code>catalog-process.js</code>, <code>image-process.js</code>, and <code>preload.js</code>—plus the renderer assets. The first three target Electron's main/Node environment, preload targets the isolated preload environment, and renderer targets the web platform. Renderer CSS is emitted as an external CSS asset by <code>mini-css-extract-plugin</code> rather than injected by JavaScript, allowing packaged builds to retain <code>style-src 'self'</code>. better-sqlite3 and Sharp native binaries are externalized from JavaScript bundling and resolved from verified ASAR-unpacked package paths. Production source maps are not shipped, and no runtime entry point loads code from Collection.
 
 ### 7.2 Packaging
 
@@ -322,7 +323,7 @@ The packaged application sets:
 - <code>EnableNodeCliInspectArguments = false</code>
 - <code>OnlyLoadAppFromAsar = true</code>
 - <code>EnableEmbeddedAsarIntegrityValidation = true</code>
-- <code>LoadBrowserProcessSpecificV8Snapshot = true</code>
+- <code>LoadBrowserProcessSpecificV8Snapshot = false</code>
 
 Package verification inspects the resulting fuses. Development builds may retain debugging support but must use a separate application identity and test Collection.
 
@@ -499,6 +500,8 @@ form-action 'none';
 ~~~
 
 No inline script, <code>eval</code>, remote font, remote image, source-map URL, or analytics endpoint is permitted in the packaged renderer.
+
+Development uses a separate CSP that permits only the localhost HTTP/WebSocket connections and the <code>'unsafe-eval'</code>/<code>'unsafe-inline'</code> behavior required by the Electron Forge Webpack development server. Those development-only allowances are selected through <code>app.isPackaged</code> and must not appear in packaged builds. Renderer CSS is extracted to a stylesheet in both modes; production retains the strict <code>style-src 'self'</code> policy above.
 
 ### 9.4 IPC sender validation
 
@@ -2902,7 +2905,7 @@ The packaged app is run with outbound network blocked. Tests assert:
 On a clean Windows x64 worker:
 
 1. Check out an annotated release commit.
-2. Install Node 24.20.0 and npm 12.0.2.
+2. Install Node 24.20.0 and npm 11.19.0.
 3. Run <code>npm ci</code>.
 4. Verify direct package versions and vendor ExifTool checksum.
 5. Run formatting, linting, type checking, unit, integration, and renderer tests.

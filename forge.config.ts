@@ -16,7 +16,8 @@ const config: ForgeConfig = {
     {
       name: '@electron-forge/maker-zip',
       platforms: ['win32'],
-    }
+      config: {},
+    },
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
@@ -43,7 +44,7 @@ const config: ForgeConfig = {
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
-      [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: true,
+      [FuseV1Options.LoadBrowserProcessSpecificV8Snapshot]: false,
     }),
   ],
 };

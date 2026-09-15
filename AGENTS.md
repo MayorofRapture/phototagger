@@ -75,7 +75,7 @@ All direct dependencies must use **exact pinned versions** with a committed `pac
 - **yazl**: `3.3.1`
 - **Electron Forge**: `7.11.2`
 - **Webpack**: `5.110.3`
-- **TypeScript**: `7.0.2`
+- **TypeScript**: `5.4.5`
 - **Vitest**: `5.0.0`
 - **Playwright**: `1.63.0`
 - **ESLint**: `10.10.0`
