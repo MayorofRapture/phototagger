@@ -2,7 +2,13 @@ import type { Configuration } from 'webpack';
 import { rules } from './webpack.rules';
 
 export const mainConfig: Configuration = {
-  entry: './src/main/main.ts',
+  entry: {
+    index: './src/main/main.ts',
+    catalog_process: './src/catalog/catalog-process.ts',
+  },
+  output: {
+    filename: '[name].js',
+  },
   module: {
     rules,
   },
