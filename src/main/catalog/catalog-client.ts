@@ -5,17 +5,20 @@ import {
   CatalogResponseSchema,
   CatalogRequestType,
   CloseCatalogResultSchema,
+  OpenCatalogResultSchema,
   OpenTestCatalogResultSchema,
   PingResultSchema,
   type CatalogResponse,
   type CloseCatalogResult,
   type OpenTestCatalogResult,
+  type OpenCatalogResult,
   type PingResult,
 } from '../../shared/contracts/catalog-process';
 
 export interface CatalogClientOptions {
   entryPath?: string;
   requestTimeoutMs?: number;
+  onUnexpectedExit?: (error: Error) => void;
 }
 
 interface PendingRequest {
@@ -31,12 +34,14 @@ export class CatalogClient {
   private requestCounter = 0;
   private readonly entryPath: string;
   private readonly requestTimeoutMs: number;
+  private readonly onUnexpectedExit: ((error: Error) => void) | undefined;
   private isShuttingDown = false;
 
   constructor(options: CatalogClientOptions = {}) {
     this.entryPath =
       options.entryPath || path.join(__dirname, 'catalog_process.js');
     this.requestTimeoutMs = options.requestTimeoutMs || 10000;
+    this.onUnexpectedExit = options.onUnexpectedExit;
   }
 
   public start(): void {
@@ -69,6 +74,14 @@ export class CatalogClient {
       CatalogRequestType.OPEN_TEST_CATALOG,
       { databasePath },
       OpenTestCatalogResultSchema
+    );
+  }
+
+  public async openCatalog(databasePath: string): Promise<OpenCatalogResult> {
+    return this.sendRequest(
+      CatalogRequestType.OPEN_CATALOG,
+      { databasePath },
+      OpenCatalogResultSchema
     );
   }
 
@@ -182,12 +195,20 @@ export class CatalogClient {
   }
 
   private handleExit(code: number): void {
-    const reason = this.isShuttingDown
-      ? 'Catalog process shut down cleanly'
-      : `Catalog process exited unexpectedly with code ${code}`;
+    const unexpectedExit = !this.isShuttingDown;
+    const reason = unexpectedExit
+      ? `Catalog process exited unexpectedly with code ${code}`
+      : 'Catalog process shut down cleanly';
 
     this.child = null;
     this.rejectAllPending(reason);
+    if (unexpectedExit) {
+      try {
+        this.onUnexpectedExit?.(new Error(reason));
+      } catch {
+        // A reporting callback must not destabilize the main process.
+      }
+    }
   }
 
   private rejectAllPending(reason: string): void {

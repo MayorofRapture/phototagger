@@ -2,6 +2,7 @@ import {
   applyInitialMigration,
   createSessionTables,
   openNewCatalogForSchemaValidation,
+  openProductionCatalog,
   type CatalogDatabase,
 } from './migrations/schema';
 import {
@@ -12,13 +13,15 @@ import {
 } from '../shared/contracts/catalog-process';
 
 interface CatalogProcessDependencies {
-  openCatalog: typeof openNewCatalogForSchemaValidation;
+  openTestCatalog: typeof openNewCatalogForSchemaValidation;
+  openProductionCatalog: typeof openProductionCatalog;
   applyMigration: typeof applyInitialMigration;
   createTemporaryTables: typeof createSessionTables;
 }
 
 const defaultDependencies: CatalogProcessDependencies = {
-  openCatalog: openNewCatalogForSchemaValidation,
+  openTestCatalog: openNewCatalogForSchemaValidation,
+  openProductionCatalog,
   applyMigration: applyInitialMigration,
   createTemporaryTables: createSessionTables,
 };
@@ -91,6 +94,9 @@ export class CatalogProcessHandler {
         case CatalogRequestType.OPEN_TEST_CATALOG:
           return this.openTestCatalog(request);
 
+        case CatalogRequestType.OPEN_CATALOG:
+          return this.openCatalog(request);
+
         case CatalogRequestType.CLOSE_CATALOG:
           if (this.db === null) {
             return {
@@ -136,7 +142,7 @@ export class CatalogProcessHandler {
     }
 
     const { databasePath } = request.payload;
-    const database = this.dependencies.openCatalog(databasePath);
+    const database = this.dependencies.openTestCatalog(databasePath);
     try {
       this.dependencies.applyMigration(database);
       this.dependencies.createTemporaryTables(database);
@@ -153,6 +159,50 @@ export class CatalogProcessHandler {
         requestId: request.requestId,
         success: true,
         result: { opened: true, databasePath, userVersion, temporaryTableNames },
+      };
+    } catch (error) {
+      if (database.open) {
+        database.close();
+      }
+      throw error;
+    }
+  }
+
+  private openCatalog(
+    request: Extract<CatalogRequest, { type: 'openCatalog' }>
+  ): CatalogResponse {
+    if (this.db !== null) {
+      return {
+        requestId: request.requestId,
+        success: false,
+        error: {
+          code: 'CATALOG_ALREADY_OPEN',
+          message: `Catalog is already open at ${this.dbPath}`,
+        },
+      };
+    }
+
+    const { databasePath } = request.payload;
+    const openedCatalog = this.dependencies.openProductionCatalog(databasePath);
+    const { database, created } = openedCatalog;
+    try {
+      if (created) {
+        this.dependencies.applyMigration(database);
+      }
+      this.dependencies.createTemporaryTables(database);
+      const userVersion = Number(database.pragma('user_version', { simple: true }));
+      const temporaryTableNames = database
+        .prepare("SELECT name FROM sqlite_temp_master WHERE type = 'table' ORDER BY name")
+        .pluck()
+        .all()
+        .map(String);
+
+      this.db = database;
+      this.dbPath = databasePath;
+      return {
+        requestId: request.requestId,
+        success: true,
+        result: { opened: true, created, userVersion, temporaryTableNames },
       };
     } catch (error) {
       if (database.open) {

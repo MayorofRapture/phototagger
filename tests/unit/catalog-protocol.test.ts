@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import Database from 'better-sqlite3';
 import { describe, expect, it, afterEach } from 'vitest';
 import { CatalogProcessHandler, handler } from '../../src/catalog/catalog-process';
 import { CatalogRequestType } from '../../src/shared/contracts/catalog-process';
@@ -150,6 +151,92 @@ describe('Catalog process handler and protocol validation', () => {
       expect(openResponse.error.code).toBe('EXECUTION_ERROR');
     }
 
+    expect(() => fs.rmSync(dbPath)).not.toThrow();
+  });
+
+  it('creates and reopens a compatible production catalog with TEMP tables', () => {
+    const dbPath = getTempDbPath();
+    const productionHandler = new CatalogProcessHandler({}, false);
+    const openRequest = {
+      requestId: 'production-open-1',
+      type: CatalogRequestType.OPEN_CATALOG,
+      payload: { databasePath: dbPath },
+    };
+
+    const freshResponse = productionHandler.handleRawMessage(openRequest);
+    expect(freshResponse).toEqual({
+      requestId: 'production-open-1',
+      success: true,
+      result: {
+        opened: true,
+        created: true,
+        userVersion: 1,
+        temporaryTableNames: ['selection_members', 'selection_sessions', 'view_members', 'view_sessions'],
+      },
+    });
+
+    const secondResponse = productionHandler.handleRawMessage({
+      ...openRequest,
+      requestId: 'production-open-2',
+    });
+    expect(secondResponse).toMatchObject({
+      requestId: 'production-open-2',
+      success: false,
+      error: { code: 'CATALOG_ALREADY_OPEN' },
+    });
+
+    productionHandler.closeDatabase();
+    const reopenedHandler = new CatalogProcessHandler({}, false);
+    const reopenedResponse = reopenedHandler.handleRawMessage({
+      ...openRequest,
+      requestId: 'production-reopen',
+    });
+    expect(reopenedResponse).toMatchObject({
+      requestId: 'production-reopen',
+      success: true,
+      result: { opened: true, created: false, userVersion: 1 },
+    });
+    reopenedHandler.closeDatabase();
+  });
+
+  it('rejects a production catalog with a newer unsupported schema', () => {
+    const dbPath = getTempDbPath();
+    const database = new Database(dbPath);
+    database.pragma('application_id = 0x50544147');
+    database.pragma('user_version = 2');
+    database.close();
+
+    const productionHandler = new CatalogProcessHandler({}, false);
+    const response = productionHandler.handleRawMessage({
+      requestId: 'production-newer',
+      type: CatalogRequestType.OPEN_CATALOG,
+      payload: { databasePath: dbPath },
+    });
+    expect(response).toMatchObject({
+      requestId: 'production-newer',
+      success: false,
+      error: { code: 'EXECUTION_ERROR' },
+    });
+    if (!response.success) {
+      expect(response.error.message).toContain('newer than supported');
+    }
+    expect(() => fs.rmSync(dbPath)).not.toThrow();
+  });
+
+  it('closes a production connection when post-open initialization fails', () => {
+    const dbPath = getTempDbPath();
+    const failingHandler = new CatalogProcessHandler({
+      createTemporaryTables: () => {
+        throw new Error('simulated production TEMP initialization failure');
+      },
+    }, false);
+    const response = failingHandler.handleRawMessage({
+      requestId: 'production-init-failure',
+      type: CatalogRequestType.OPEN_CATALOG,
+      payload: { databasePath: dbPath },
+    });
+
+    expect(response).toMatchObject({ success: false, error: { code: 'EXECUTION_ERROR' } });
     expect(() => fs.rmSync(dbPath)).not.toThrow();
   });
 });

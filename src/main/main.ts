@@ -8,6 +8,8 @@ import {
 import { configureSecurityPolicies, attachWindowSecurityHandlers } from './bootstrap/security';
 import { initLogger } from './services/logger';
 import { registerIpcHandlers, setMainWindow } from './ipc/register';
+import { CatalogClient } from './catalog/catalog-client';
+import { CatalogLifecycle } from './catalog/catalog-lifecycle';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -31,6 +33,10 @@ configureElectronPaths(collectionPaths);
 // Initialize Pino logger
 const logger = initLogger(collectionPaths.logs);
 logger.info('Starting PhotoTagger main process. Version: %s', app.getVersion());
+const catalogClient = new CatalogClient({
+  onUnexpectedExit: (error) => logger.error({ err: error }, 'Catalog utility process exited unexpectedly'),
+});
+const catalogLifecycle = new CatalogLifecycle(catalogClient, logger);
 
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
@@ -64,15 +70,40 @@ const createWindow = (): void => {
   });
 };
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   configureSecurityPolicies();
+  await catalogLifecycle.start(collectionPaths);
   registerIpcHandlers(collectionPaths, app.getVersion() || '1.0.0');
   createWindow();
+
+  if (process.env.PHOTOTAGGER_SMOKE_AUTO_QUIT === '1') {
+    setTimeout(() => app.quit(), 250);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
+  });
+}).catch((error: unknown) => {
+  logger.error({ err: error }, 'Application startup aborted');
+  app.quit();
+});
+
+let allowQuit = false;
+let quitInProgress = false;
+app.on('before-quit', (event) => {
+  if (allowQuit) {
+    return;
+  }
+  event.preventDefault();
+  if (quitInProgress) {
+    return;
+  }
+  quitInProgress = true;
+  void catalogLifecycle.stop().finally(() => {
+    allowQuit = true;
+    app.quit();
   });
 });
 

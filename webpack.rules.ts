@@ -7,6 +7,10 @@ export const rules: Required<ModuleOptions>['rules'] = [
     use: 'node-loader',
   },
   {
+    test: /node_modules[/\\]better-sqlite3[/\\]prebuilds[/\\].+\.node$/,
+    use: 'node-loader',
+  },
+  {
     test: /[/\\]node_modules[/\\]@electron[/\\].+\.node$/,
     use: 'node-loader',
   },

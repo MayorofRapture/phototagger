@@ -106,6 +106,27 @@ describe('CatalogClient', () => {
     await expect(openPromise).rejects.toThrow('[EXECUTION_ERROR] Failed to open database');
   });
 
+  it('sends the distinct production catalog operation', async () => {
+    const client = new CatalogClient();
+    client.start();
+    const messageHandler = mockOn.mock.calls.find(call => call[0] === 'message')?.[1];
+    const openPromise = client.openCatalog('D:\\isolated\\Collection\\Data\\catalog.sqlite');
+    const sentRequest = mockPostMessage.mock.calls[0][0];
+    expect(sentRequest.type).toBe('openCatalog');
+
+    messageHandler({
+      requestId: sentRequest.requestId,
+      success: true,
+      result: {
+        opened: true,
+        created: true,
+        userVersion: 1,
+        temporaryTableNames: ['selection_members', 'selection_sessions', 'view_members', 'view_sessions'],
+      },
+    });
+    await expect(openPromise).resolves.toMatchObject({ opened: true, created: true });
+  });
+
   it('times out outstanding requests', async () => {
     const client = new CatalogClient({ requestTimeoutMs: 1000 });
     client.start();

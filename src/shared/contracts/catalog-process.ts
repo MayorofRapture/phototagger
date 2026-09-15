@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const CatalogRequestType = {
   PING: 'ping',
+  OPEN_CATALOG: 'openCatalog',
   OPEN_TEST_CATALOG: 'openTestCatalog',
   CLOSE_CATALOG: 'closeCatalog',
 } as const;
@@ -13,7 +14,11 @@ const RequestIdSchema = z.string().min(1).max(128);
 export const PingPayloadSchema = z.object({}).strict();
 
 export const OpenTestCatalogPayloadSchema = z.object({
-  databasePath: z.string().min(1),
+  databasePath: z.string().min(1).max(32767),
+}).strict();
+
+export const OpenCatalogPayloadSchema = z.object({
+  databasePath: z.string().min(1).max(32767),
 }).strict();
 
 export const CloseCatalogPayloadSchema = z.object({}).strict();
@@ -23,6 +28,11 @@ export const CatalogRequestSchema = z.discriminatedUnion('type', [
     requestId: RequestIdSchema,
     type: z.literal(CatalogRequestType.PING),
     payload: PingPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.OPEN_CATALOG),
+    payload: OpenCatalogPayloadSchema,
   }).strict(),
   z.object({
     requestId: RequestIdSchema,
@@ -88,6 +98,20 @@ export interface OpenTestCatalogResult {
 export const OpenTestCatalogResultSchema = z.object({
   opened: z.literal(true),
   databasePath: z.string(),
+  userVersion: z.number().int(),
+  temporaryTableNames: z.array(z.string()),
+}).strict();
+
+export interface OpenCatalogResult {
+  opened: true;
+  created: boolean;
+  userVersion: number;
+  temporaryTableNames: string[];
+}
+
+export const OpenCatalogResultSchema = z.object({
+  opened: z.literal(true),
+  created: z.boolean(),
   userVersion: z.number().int(),
   temporaryTableNames: z.array(z.string()),
 }).strict();
