@@ -35,14 +35,17 @@ describe('production catalog lifecycle', () => {
     const dataPath = path.join('D:\\isolated', 'Collection', 'Data');
     const paths = collectionPaths(dataPath);
     const client = createClient();
-    const lifecycle = new CatalogLifecycle(client, createLogger());
+    const lifecycle = new CatalogLifecycle(client, createLogger(), '1.0.0-test');
 
     await lifecycle.start(paths);
 
     expect(resolveCatalogPath(paths)).toBe(path.join(dataPath, 'catalog.sqlite'));
     expect(client.start).toHaveBeenCalledOnce();
     expect(client.ping).toHaveBeenCalledOnce();
-    expect(client.openCatalog).toHaveBeenCalledWith(path.join(dataPath, 'catalog.sqlite'));
+    expect(client.openCatalog).toHaveBeenCalledWith(
+      path.join(dataPath, 'catalog.sqlite'),
+      '1.0.0-test'
+    );
     expect(vi.mocked(client.start).mock.invocationCallOrder[0])
       .toBeLessThan(vi.mocked(client.openCatalog).mock.invocationCallOrder[0]);
   });
@@ -52,7 +55,7 @@ describe('production catalog lifecycle', () => {
       openCatalog: vi.fn().mockRejectedValue(new Error('catalog open failed')),
     });
     const logger = createLogger();
-    const lifecycle = new CatalogLifecycle(client, logger);
+    const lifecycle = new CatalogLifecycle(client, logger, '1.0.0-test');
 
     await expect(lifecycle.start(collectionPaths('D:\\isolated\\Collection\\Data')))
       .rejects.toThrow('catalog open failed');
@@ -66,7 +69,7 @@ describe('production catalog lifecycle', () => {
         throw new Error('process start failed');
       }),
     });
-    const lifecycle = new CatalogLifecycle(client, createLogger());
+    const lifecycle = new CatalogLifecycle(client, createLogger(), '1.0.0-test');
 
     await expect(lifecycle.start(collectionPaths('D:\\isolated\\Collection\\Data')))
       .rejects.toThrow('process start failed');

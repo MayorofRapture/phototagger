@@ -1,10 +1,12 @@
 import {
   applyInitialMigration,
+  cleanupNewCatalogArtifacts,
   createSessionTables,
   openNewCatalogForSchemaValidation,
   openProductionCatalog,
   type CatalogDatabase,
 } from './migrations/schema';
+import { initializeNewCatalogState } from './migrations/initial-state';
 import {
   CatalogRequestSchema,
   CatalogRequestType,
@@ -16,6 +18,7 @@ interface CatalogProcessDependencies {
   openTestCatalog: typeof openNewCatalogForSchemaValidation;
   openProductionCatalog: typeof openProductionCatalog;
   applyMigration: typeof applyInitialMigration;
+  initializeNewState: typeof initializeNewCatalogState;
   createTemporaryTables: typeof createSessionTables;
 }
 
@@ -23,6 +26,7 @@ const defaultDependencies: CatalogProcessDependencies = {
   openTestCatalog: openNewCatalogForSchemaValidation,
   openProductionCatalog,
   applyMigration: applyInitialMigration,
+  initializeNewState: initializeNewCatalogState,
   createTemporaryTables: createSessionTables,
 };
 
@@ -187,7 +191,10 @@ export class CatalogProcessHandler {
     const { database, created } = openedCatalog;
     try {
       if (created) {
-        this.dependencies.applyMigration(database);
+        this.dependencies.initializeNewState(database, {
+          appVersion: request.payload.appVersion,
+          applyMigration: this.dependencies.applyMigration,
+        });
       }
       this.dependencies.createTemporaryTables(database);
       const userVersion = Number(database.pragma('user_version', { simple: true }));
@@ -207,6 +214,9 @@ export class CatalogProcessHandler {
     } catch (error) {
       if (database.open) {
         database.close();
+      }
+      if (created) {
+        cleanupNewCatalogArtifacts(databasePath);
       }
       throw error;
     }

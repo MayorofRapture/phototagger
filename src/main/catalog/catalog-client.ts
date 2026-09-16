@@ -77,10 +77,10 @@ export class CatalogClient {
     );
   }
 
-  public async openCatalog(databasePath: string): Promise<OpenCatalogResult> {
+  public async openCatalog(databasePath: string, appVersion: string): Promise<OpenCatalogResult> {
     return this.sendRequest(
       CatalogRequestType.OPEN_CATALOG,
-      { databasePath },
+      { databasePath, appVersion },
       OpenCatalogResultSchema
     );
   }

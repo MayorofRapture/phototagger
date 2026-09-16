@@ -160,7 +160,7 @@ describe('Catalog process handler and protocol validation', () => {
     const openRequest = {
       requestId: 'production-open-1',
       type: CatalogRequestType.OPEN_CATALOG,
-      payload: { databasePath: dbPath },
+      payload: { databasePath: dbPath, appVersion: '1.0.0-test' },
     };
 
     const freshResponse = productionHandler.handleRawMessage(openRequest);
@@ -210,7 +210,7 @@ describe('Catalog process handler and protocol validation', () => {
     const response = productionHandler.handleRawMessage({
       requestId: 'production-newer',
       type: CatalogRequestType.OPEN_CATALOG,
-      payload: { databasePath: dbPath },
+      payload: { databasePath: dbPath, appVersion: '1.0.0-test' },
     });
     expect(response).toMatchObject({
       requestId: 'production-newer',
@@ -233,10 +233,10 @@ describe('Catalog process handler and protocol validation', () => {
     const response = failingHandler.handleRawMessage({
       requestId: 'production-init-failure',
       type: CatalogRequestType.OPEN_CATALOG,
-      payload: { databasePath: dbPath },
+      payload: { databasePath: dbPath, appVersion: '1.0.0-test' },
     });
 
     expect(response).toMatchObject({ success: false, error: { code: 'EXECUTION_ERROR' } });
-    expect(() => fs.rmSync(dbPath)).not.toThrow();
+    expect(fs.existsSync(dbPath)).toBe(false);
   });
 });

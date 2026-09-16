@@ -110,9 +110,16 @@ describe('CatalogClient', () => {
     const client = new CatalogClient();
     client.start();
     const messageHandler = mockOn.mock.calls.find(call => call[0] === 'message')?.[1];
-    const openPromise = client.openCatalog('D:\\isolated\\Collection\\Data\\catalog.sqlite');
+    const openPromise = client.openCatalog(
+      'D:\\isolated\\Collection\\Data\\catalog.sqlite',
+      '1.0.0-test'
+    );
     const sentRequest = mockPostMessage.mock.calls[0][0];
     expect(sentRequest.type).toBe('openCatalog');
+    expect(sentRequest.payload).toEqual({
+      databasePath: 'D:\\isolated\\Collection\\Data\\catalog.sqlite',
+      appVersion: '1.0.0-test',
+    });
 
     messageHandler({
       requestId: sentRequest.requestId,

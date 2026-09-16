@@ -6,7 +6,7 @@ import type { OpenCatalogResult, PingResult } from '../../shared/contracts/catal
 export interface CatalogLifecycleClient {
   start(): void;
   ping(): Promise<PingResult>;
-  openCatalog(databasePath: string): Promise<OpenCatalogResult>;
+  openCatalog(databasePath: string, appVersion: string): Promise<OpenCatalogResult>;
   stop(): Promise<void>;
 }
 
@@ -20,7 +20,8 @@ export class CatalogLifecycle {
 
   constructor(
     private readonly client: CatalogLifecycleClient,
-    private readonly logger: Pick<Logger, 'info' | 'error'>
+    private readonly logger: Pick<Logger, 'info' | 'error'>,
+    private readonly appVersion: string
   ) {}
 
   public async start(collectionPaths: CollectionPaths): Promise<OpenCatalogResult> {
@@ -34,7 +35,10 @@ export class CatalogLifecycle {
       this.client.start();
       await this.client.ping();
       this.logger.info('Opening production catalog');
-      const result = await this.client.openCatalog(resolveCatalogPath(collectionPaths));
+      const result = await this.client.openCatalog(
+        resolveCatalogPath(collectionPaths),
+        this.appVersion
+      );
       this.logger.info(
         { created: result.created, schemaVersion: result.userVersion },
         'Production catalog opened successfully'

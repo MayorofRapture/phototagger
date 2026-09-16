@@ -19,6 +19,7 @@ export const OpenTestCatalogPayloadSchema = z.object({
 
 export const OpenCatalogPayloadSchema = z.object({
   databasePath: z.string().min(1).max(32767),
+  appVersion: z.string().min(1).max(128),
 }).strict();
 
 export const CloseCatalogPayloadSchema = z.object({}).strict();

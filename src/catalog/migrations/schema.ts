@@ -1,11 +1,12 @@
 import Database from 'better-sqlite3/win32-x64';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
 const APPLICATION_ID = 0x50544147;
 export const CURRENT_SCHEMA_VERSION = 1;
 
-function resolveInitialMigrationPath(): string {
+export function resolveInitialMigrationPath(): string {
   const candidates = [
     path.resolve(process.cwd(), 'migrations', '001_initial.sql'),
     path.resolve(__dirname, '..', '..', '..', 'migrations', '001_initial.sql'),
@@ -18,6 +19,10 @@ function resolveInitialMigrationPath(): string {
     throw new Error('Migration 001 could not be located');
   }
   return migrationPath;
+}
+
+export function readInitialMigrationSql(): string {
+  return fs.readFileSync(resolveInitialMigrationPath(), 'utf8');
 }
 
 export type CatalogDatabase = Database.Database;
@@ -45,8 +50,7 @@ function configureCatalogConnection(database: CatalogDatabase): void {
 }
 
 export function applyInitialMigration(database: CatalogDatabase): void {
-  const migrationSql = fs.readFileSync(resolveInitialMigrationPath(), 'utf8');
-  database.exec(migrationSql);
+  database.exec(readInitialMigrationSql());
 }
 
 export function createSessionTables(database: CatalogDatabase): void {
@@ -82,14 +86,42 @@ export function createSessionTables(database: CatalogDatabase): void {
   `);
 }
 
-/** Opens a previously unused file path for M1A schema validation only. */
+/** Opens a previously unused file path with fresh-catalog connection configuration. */
 export function openNewCatalogForSchemaValidation(databasePath: string): CatalogDatabase {
-  if (fs.existsSync(databasePath)) {
+  if (catalogArtifactPaths(databasePath).some((artifactPath) => fs.existsSync(artifactPath))) {
     throw new Error('A fresh catalog path is required for schema validation');
   }
   const database = new Database(databasePath);
-  configureNewCatalogConnection(database);
-  return database;
+  try {
+    configureNewCatalogConnection(database);
+    return database;
+  } catch (error) {
+    if (database.open) {
+      database.close();
+    }
+    cleanupNewCatalogArtifacts(databasePath);
+    throw error;
+  }
+}
+
+/** Removes artifacts for a path that was confirmed fresh before opening. */
+export function cleanupNewCatalogArtifacts(databasePath: string): void {
+  for (const artifactPath of catalogArtifactPaths(databasePath)) {
+    try {
+      fs.rmSync(artifactPath, { force: true });
+    } catch {
+      // Cleanup is best effort; the initialization failure remains authoritative.
+    }
+  }
+}
+
+function catalogArtifactPaths(databasePath: string): string[] {
+  return [
+    databasePath,
+    `${databasePath}-wal`,
+    `${databasePath}-shm`,
+    `${databasePath}-journal`,
+  ];
 }
 
 export interface ProductionCatalogConnection {
@@ -130,11 +162,50 @@ export function openProductionCatalog(databasePath: string): ProductionCatalogCo
     if (database.prepare('PRAGMA foreign_key_check').all().length !== 0) {
       throw new Error('Catalog foreign_key_check failed');
     }
+    validateExistingCatalogState(database);
     return { database, created: false };
   } catch (error) {
     if (database.open) {
       database.close();
     }
     throw error;
+  }
+}
+
+function validateExistingCatalogState(database: CatalogDatabase): void {
+  const appState = database
+    .prepare('SELECT singleton FROM app_state WHERE singleton = 1')
+    .get();
+  if (!appState) {
+    throw new Error('Catalog is missing the required app_state singleton');
+  }
+
+  const migration = database
+    .prepare("SELECT name, sha256 FROM schema_migrations WHERE version = 1")
+    .get() as { name: string; sha256: Buffer } | undefined;
+  const expectedMigrationSha256 = createHash('sha256')
+    .update(readInitialMigrationSql(), 'utf8')
+    .digest();
+  if (
+    !migration ||
+    migration.name !== '001_initial.sql' ||
+    !Buffer.isBuffer(migration.sha256) ||
+    !migration.sha256.equals(expectedMigrationSha256)
+  ) {
+    throw new Error('Catalog is missing the required Migration 001 history row');
+  }
+
+  const requiredSettings = [
+    'conversion.jpegQuality',
+    'conversion.alphaBackground',
+    'library.defaultOrder',
+    'batch.warningThreshold',
+    'backup.secondaryDestination',
+  ];
+  const settingExists = database.prepare('SELECT 1 FROM settings WHERE key = ?');
+  for (const key of requiredSettings) {
+    if (!settingExists.get(key)) {
+      throw new Error(`Catalog is missing required initial setting ${key}`);
+    }
   }
 }

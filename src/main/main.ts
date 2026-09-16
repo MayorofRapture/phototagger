@@ -36,7 +36,11 @@ logger.info('Starting PhotoTagger main process. Version: %s', app.getVersion());
 const catalogClient = new CatalogClient({
   onUnexpectedExit: (error) => logger.error({ err: error }, 'Catalog utility process exited unexpectedly'),
 });
-const catalogLifecycle = new CatalogLifecycle(catalogClient, logger);
+const catalogLifecycle = new CatalogLifecycle(
+  catalogClient,
+  logger,
+  app.getVersion() || '1.0.0'
+);
 
 const createWindow = (): void => {
   const mainWindow = new BrowserWindow({
