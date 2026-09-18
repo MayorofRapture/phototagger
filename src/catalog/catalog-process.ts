@@ -7,7 +7,13 @@ import {
   type CatalogDatabase,
 } from './migrations/schema';
 import { initializeNewCatalogState } from './migrations/initial-state';
+import { IssuedLibraryQueryRegistry } from './library/library-query-model';
+import { LibraryQueryService } from './queries/library-query';
+import { TagSuggestionsQuery } from './queries/tag-suggestions';
+import { SettingsRepository } from './repositories/settings-repository';
+import { LibrarySelectionService } from './sessions/library-selection-service';
 import {
+  CatalogResponseSchema,
   CatalogRequestSchema,
   CatalogRequestType,
   type CatalogRequest,
@@ -30,9 +36,17 @@ const defaultDependencies: CatalogProcessDependencies = {
   createTemporaryTables: createSessionTables,
 };
 
+interface CatalogServices {
+  settings: SettingsRepository;
+  tagSuggestions: TagSuggestionsQuery;
+  libraryQueries: LibraryQueryService;
+  librarySelections: LibrarySelectionService;
+}
+
 export class CatalogProcessHandler {
   private db: CatalogDatabase | null = null;
   private dbPath: string | null = null;
+  private services: CatalogServices | null = null;
   private readonly dependencies: CatalogProcessDependencies;
 
   constructor(
@@ -67,7 +81,19 @@ export class CatalogProcessHandler {
       };
     }
 
-    return this.dispatchRequest(parseResult.data);
+    const response = this.dispatchRequest(parseResult.data);
+    const safeResponse = CatalogResponseSchema.safeParse(response);
+    if (!safeResponse.success) {
+      return {
+        requestId: parseResult.data.requestId,
+        success: false,
+        error: {
+          code: 'INVALID_RESPONSE',
+          message: 'Catalog operation produced an unsafe response',
+        },
+      };
+    }
+    return response;
   }
 
   public closeDatabase(): void {
@@ -82,6 +108,7 @@ export class CatalogProcessHandler {
     } finally {
       this.db = null;
       this.dbPath = null;
+      this.services = null;
     }
   }
 
@@ -117,6 +144,73 @@ export class CatalogProcessHandler {
             requestId: request.requestId,
             success: true,
             result: { closed: true },
+          };
+
+        case CatalogRequestType.READ_GENERAL_SETTINGS:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().settings.readGeneralSettings(),
+          };
+
+        case CatalogRequestType.FIND_TAG_SUGGESTIONS:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().tagSuggestions.findTagSuggestions(
+              request.payload.query,
+              request.payload.limit
+            ),
+          };
+
+        case CatalogRequestType.QUERY_LIBRARY:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().libraryQueries.queryLibrary(
+              request.payload.query,
+              request.payload.options
+            ),
+          };
+
+        case CatalogRequestType.CREATE_SELECTION:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().librarySelections.createSelection(
+              request.payload.queryFingerprint,
+              request.payload.seed
+            ),
+          };
+
+        case CatalogRequestType.UPDATE_SELECTION:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().librarySelections.updateSelection(
+              request.payload.selectionId,
+              request.payload.photoIds,
+              request.payload.selected
+            ),
+          };
+
+        case CatalogRequestType.GET_SELECTION:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().librarySelections.getSelection(
+              request.payload.selectionId
+            ),
+          };
+
+        case CatalogRequestType.CLEAR_SELECTION:
+          this.requireServices().librarySelections.clearSelection(
+            request.payload.selectionId
+          );
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: { cleared: true },
           };
       }
     } catch (error: unknown) {
@@ -159,6 +253,7 @@ export class CatalogProcessHandler {
 
       this.db = database;
       this.dbPath = databasePath;
+      this.services = this.createServices(database);
       return {
         requestId: request.requestId,
         success: true,
@@ -206,6 +301,7 @@ export class CatalogProcessHandler {
 
       this.db = database;
       this.dbPath = databasePath;
+      this.services = this.createServices(database);
       return {
         requestId: request.requestId,
         success: true,
@@ -220,6 +316,23 @@ export class CatalogProcessHandler {
       }
       throw error;
     }
+  }
+
+  private createServices(database: CatalogDatabase): CatalogServices {
+    const registry = new IssuedLibraryQueryRegistry();
+    return {
+      settings: new SettingsRepository(database),
+      tagSuggestions: new TagSuggestionsQuery(database),
+      libraryQueries: new LibraryQueryService(database, registry),
+      librarySelections: new LibrarySelectionService(database, registry),
+    };
+  }
+
+  private requireServices(): CatalogServices {
+    if (this.db === null || this.services === null) {
+      throw new Error('No catalog is currently open');
+    }
+    return this.services;
   }
 
   private setupExitHandlers(): void {

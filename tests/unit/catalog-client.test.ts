@@ -134,6 +134,115 @@ describe('CatalogClient', () => {
     await expect(openPromise).resolves.toMatchObject({ opened: true, created: true });
   });
 
+  it('sends every M1E1 request through an explicit operation with a unique request ID', async () => {
+    const client = new CatalogClient();
+    client.start();
+    const messageHandler = mockOn.mock.calls.find((call) => call[0] === 'message')?.[1];
+    const fingerprint = 'a'.repeat(64);
+    const selectionId = '00000000-0000-4000-8000-000000000001';
+    const query = {
+      tagIds: [],
+      flaggedOnly: false,
+      order: 'newest-imported' as const,
+    };
+    const selection = { selectionId, count: 0, catalogRevisionAtCapture: 2 };
+    const requestIds = new Set<string>();
+
+    async function expectRequest(
+      invoke: () => Promise<unknown>,
+      type: string,
+      payload: unknown,
+      result: unknown
+    ): Promise<void> {
+      const pending = invoke();
+      const sent = mockPostMessage.mock.calls.at(-1)?.[0];
+      expect(sent).toMatchObject({ type, payload });
+      expect(requestIds.has(sent.requestId)).toBe(false);
+      requestIds.add(sent.requestId);
+      messageHandler({ requestId: sent.requestId, success: true, result });
+      await expect(pending).resolves.toEqual(result);
+    }
+
+    await expectRequest(
+      () => client.readGeneralSettings(),
+      'settings.readGeneral',
+      {},
+      {
+        settings: {
+          jpegQuality: 92,
+          alphaBackground: '#ffffff',
+          defaultOrder: 'newest-imported',
+          warningThreshold: 500,
+        },
+        warnings: [],
+      }
+    );
+    await expectRequest(
+      () => client.findTagSuggestions('cat', 10),
+      'tags.findSuggestions',
+      { query: 'cat', limit: 10 },
+      [
+        {
+          tagId: 1,
+          parentTagId: null,
+          displayName: 'Cats',
+          fullPath: 'Cats',
+          depth: 1,
+          childCount: 0,
+          pinned: false,
+          legacyFlatOnly: false,
+        },
+      ]
+    );
+    await expectRequest(
+      () => client.queryLibrary(query, { pageSize: 20 }),
+      'library.query',
+      { query, options: { pageSize: 20 } },
+      {
+        queryFingerprint: fingerprint,
+        totalCount: 0,
+        photos: [],
+        nextCursor: null,
+      }
+    );
+    await expectRequest(
+      () => client.createLibrarySelection(fingerprint, { type: 'none' }),
+      'selection.create',
+      { queryFingerprint: fingerprint, seed: { type: 'none' } },
+      selection
+    );
+    await expectRequest(
+      () => client.updateLibrarySelection(selectionId, [1, 2], true),
+      'selection.update',
+      { selectionId, photoIds: [1, 2], selected: true },
+      { ...selection, count: 2 }
+    );
+    await expectRequest(
+      () => client.getLibrarySelection(selectionId),
+      'selection.get',
+      { selectionId },
+      selection
+    );
+    await expectRequest(
+      () => client.clearLibrarySelection(selectionId),
+      'selection.clear',
+      { selectionId },
+      { cleared: true }
+    );
+    expect(requestIds.size).toBe(7);
+  });
+
+  it('rejects invalid M1E1 input before posting to the utility process', async () => {
+    const client = new CatalogClient();
+    client.start();
+
+    await expect(client.findTagSuggestions('cat', 51)).rejects.toThrow();
+    await expect(
+      client.updateLibrarySelection('00000000-0000-4000-8000-000000000001', [0], true)
+    ).rejects.toThrow();
+    expect(mockPostMessage).not.toHaveBeenCalled();
+  });
+
   it('times out outstanding requests', async () => {
     const client = new CatalogClient({ requestTimeoutMs: 1000 });
     client.start();

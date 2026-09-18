@@ -4,7 +4,220 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { describe, expect, it, afterEach } from 'vitest';
 import { CatalogProcessHandler, handler } from '../../src/catalog/catalog-process';
-import { CatalogRequestType } from '../../src/shared/contracts/catalog-process';
+import {
+  CatalogRequestSchema,
+  CatalogRequestType,
+  CatalogResponseSchema,
+} from '../../src/shared/contracts/catalog-process';
+
+const fingerprint = 'a'.repeat(64);
+const selectionId = '00000000-0000-4000-8000-000000000001';
+const libraryQuery = {
+  tagIds: [2, 1, 2],
+  flaggedOnly: false,
+  order: 'newest-imported',
+};
+
+function request(type: string, payload: unknown): unknown {
+  return { requestId: `request-${type}`, type, payload };
+}
+
+describe('M1E1 catalog transport contracts', () => {
+  it('accepts settings read and rejects unknown payload fields', () => {
+    expect(
+      CatalogRequestSchema.safeParse(request(CatalogRequestType.READ_GENERAL_SETTINGS, {})).success
+    ).toBe(true);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.READ_GENERAL_SETTINGS, {
+          key: 'conversion.jpegQuality',
+        })
+      ).success
+    ).toBe(false);
+  });
+
+  it('accepts tag suggestions and rejects invalid limits', () => {
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.FIND_TAG_SUGGESTIONS, {
+          query: 'cat',
+          limit: 50,
+        })
+      ).success
+    ).toBe(true);
+    for (const limit of [0, 51, 1.5]) {
+      expect(
+        CatalogRequestSchema.safeParse(
+          request(CatalogRequestType.FIND_TAG_SUGGESTIONS, {
+            query: 'cat',
+            limit,
+          })
+        ).success
+      ).toBe(false);
+    }
+  });
+
+  it('strictly validates Library queries, page sizes, and cursor shape', () => {
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.QUERY_LIBRARY, {
+          query: libraryQuery,
+          options: { pageSize: 200, cursor: null },
+        })
+      ).success
+    ).toBe(true);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.QUERY_LIBRARY, {
+          query: { ...libraryQuery, extra: true },
+        })
+      ).success
+    ).toBe(false);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.QUERY_LIBRARY, {
+          query: libraryQuery,
+          options: { pageSize: 201 },
+        })
+      ).success
+    ).toBe(false);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.QUERY_LIBRARY, {
+          query: libraryQuery,
+          options: { cursor: 'not base64url!' },
+        })
+      ).success
+    ).toBe(false);
+  });
+
+  it('accepts every selection seed and rejects malformed selection payloads', () => {
+    for (const seed of [{ type: 'none' }, { type: 'all' }, { type: 'one', photoId: 42 }]) {
+      expect(
+        CatalogRequestSchema.safeParse(
+          request(CatalogRequestType.CREATE_SELECTION, {
+            queryFingerprint: fingerprint,
+            seed,
+          })
+        ).success
+      ).toBe(true);
+    }
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.CREATE_SELECTION, {
+          queryFingerprint: fingerprint,
+          seed: { type: 'one', photoId: 0 },
+        })
+      ).success
+    ).toBe(false);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.UPDATE_SELECTION, {
+          selectionId,
+          photoIds: [1, -1],
+          selected: true,
+        })
+      ).success
+    ).toBe(false);
+  });
+
+  it('rejects unknown operations', () => {
+    expect(CatalogRequestSchema.safeParse(request('catalog.call', {})).success).toBe(false);
+  });
+
+  it('validates response envelopes and rejects BigInt anywhere in result data', () => {
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'response-1',
+        success: true,
+        result: { nested: [{ count: 42, value: null }] },
+      }).success
+    ).toBe(true);
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'response-2',
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'Invalid request' },
+      }).success
+    ).toBe(true);
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'response-3',
+        success: true,
+        result: { catalogRevision: 1n },
+      }).success
+    ).toBe(false);
+  });
+
+  it('keeps representative renderer responses plain and structured-clone safe', () => {
+    const representativeResults = [
+      {
+        settings: {
+          jpegQuality: 92,
+          alphaBackground: '#ffffff',
+          defaultOrder: 'newest-imported',
+          warningThreshold: 500,
+        },
+        warnings: [],
+      },
+      [
+        {
+          tagId: 1,
+          parentTagId: null,
+          displayName: 'Cats',
+          fullPath: 'Pets/Cats',
+          depth: 2,
+          childCount: 0,
+          pinned: false,
+          legacyFlatOnly: false,
+        },
+      ],
+      {
+        queryFingerprint: fingerprint,
+        totalCount: 1,
+        photos: [
+          {
+            photoId: 1,
+            canonicalFilename: '0000000001.jpg',
+            originalFilename: 'cat.jpg',
+            flagged: false,
+            integrityState: 'clean',
+            width: 1200,
+            height: 800,
+            contentRevision: 1,
+            thumbnailRevision: 1,
+            thumbnailUrl: 'pt-photo://thumb/1?thumb=1',
+          },
+        ],
+        nextCursor: null,
+      },
+      { selectionId, count: 1, catalogRevisionAtCapture: 2 },
+    ];
+
+    for (const [index, result] of representativeResults.entries()) {
+      const envelope = { requestId: `safe-${index}`, success: true, result };
+      expect(CatalogResponseSchema.safeParse(envelope).success).toBe(true);
+      expect(structuredClone(result)).toEqual(result);
+      expect(() => JSON.stringify(result)).not.toThrow();
+    }
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'unsafe-function',
+        success: true,
+        result: { callback: () => undefined },
+      }).success
+    ).toBe(false);
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'unsafe-class',
+        success: true,
+        result: new (class Result {
+          public count = 1;
+        })(),
+      }).success
+    ).toBe(false);
+  });
+});
 
 describe('Catalog process handler and protocol validation', () => {
   const tempFiles: string[] = [];

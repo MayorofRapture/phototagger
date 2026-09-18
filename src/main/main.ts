@@ -77,7 +77,7 @@ const createWindow = (): void => {
 app.whenReady().then(async () => {
   configureSecurityPolicies();
   await catalogLifecycle.start(collectionPaths);
-  registerIpcHandlers(collectionPaths, app.getVersion() || '1.0.0');
+  registerIpcHandlers(collectionPaths, app.getVersion() || '1.0.0', catalogClient);
   createWindow();
 
   if (process.env.PHOTOTAGGER_SMOKE_AUTO_QUIT === '1') {

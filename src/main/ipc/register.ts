@@ -1,9 +1,47 @@
 import { ipcMain, BrowserWindow, IpcMainInvokeEvent } from 'electron';
+import type { ZodType } from 'zod';
 import { IPC_CHANNELS, AppBootstrapDto } from '../../shared/contracts/ipc';
+import {
+  LibraryQueryPayloadSchema,
+  SelectionClearPayloadSchema,
+  SelectionCreatePayloadSchema,
+  SelectionGetPayloadSchema,
+  SelectionUpdatePayloadSchema,
+  SettingsReadPayloadSchema,
+  TagSuggestionsPayloadSchema,
+  type LibraryPageOptionsDto,
+  type LibraryPageResultDto,
+  type LibraryQueryDto,
+  type ReadGeneralSettingsResultDto,
+  type SelectionClearResultDto,
+  type SelectionRefDto,
+  type SelectionSeedDto,
+  type TagSuggestionDto,
+} from '../../shared/contracts/catalog-api';
 import { createSuccessResult, createErrorResult, IpcResult } from '../../shared/errors/app-error';
 import { getBootstrapSchema, getVersionSchema } from '../../shared/validation/ipc-schemas';
 import { CollectionPaths } from '../bootstrap/collection';
 import { getLogger } from '../services/logger';
+
+export interface CatalogIpcClient {
+  readGeneralSettings(): Promise<ReadGeneralSettingsResultDto>;
+  findTagSuggestions(query: string, limit?: number): Promise<TagSuggestionDto[]>;
+  queryLibrary(
+    query: LibraryQueryDto,
+    options?: LibraryPageOptionsDto
+  ): Promise<LibraryPageResultDto>;
+  createLibrarySelection(
+    queryFingerprint: string,
+    seed: SelectionSeedDto
+  ): Promise<SelectionRefDto>;
+  updateLibrarySelection(
+    selectionId: string,
+    photoIds: number[],
+    selected: boolean
+  ): Promise<SelectionRefDto>;
+  getLibrarySelection(selectionId: string): Promise<SelectionRefDto>;
+  clearLibrarySelection(selectionId: string): Promise<SelectionClearResultDto>;
+}
 
 let mainWindowInstance: BrowserWindow | null = null;
 
@@ -20,8 +58,58 @@ function validateSender(event: IpcMainInvokeEvent): boolean {
   return true;
 }
 
-export function registerIpcHandlers(paths: CollectionPaths, appVersion: string): void {
+export function registerIpcHandlers(
+  paths: CollectionPaths,
+  appVersion: string,
+  catalogClient: CatalogIpcClient
+): void {
   const logger = getLogger();
+
+  function registerCatalogHandler<TPayload, TResult>(
+    channel: string,
+    payloadSchema: ZodType<TPayload>,
+    operationName: string,
+    operation: (payload: TPayload) => Promise<TResult>
+  ): void {
+    ipcMain.handle(channel, async (event, payload): Promise<IpcResult<TResult>> => {
+      if (!validateSender(event)) {
+        return createErrorResult({
+          code: 'UNAUTHORIZED_SENDER',
+          category: 'permission',
+          message: 'IPC sender verification failed',
+          dataSafe: true,
+          retryable: false,
+          correlationId: 'ipc-' + Date.now(),
+        });
+      }
+
+      const parseResult = payloadSchema.safeParse(payload);
+      if (!parseResult.success) {
+        return createErrorResult({
+          code: 'INVALID_PAYLOAD',
+          category: 'validation',
+          message: `Invalid request payload for ${operationName}`,
+          dataSafe: true,
+          retryable: false,
+          correlationId: 'ipc-' + Date.now(),
+        });
+      }
+
+      try {
+        return createSuccessResult(await operation(parseResult.data));
+      } catch (error) {
+        logger.error({ err: error, operation: operationName }, 'Catalog IPC request failed');
+        return createErrorResult({
+          code: 'CATALOG_REQUEST_FAILED',
+          category: 'unavailable',
+          message: 'The catalog could not complete the request',
+          dataSafe: true,
+          retryable: false,
+          correlationId: 'ipc-' + Date.now(),
+        });
+      }
+    });
+  }
 
   ipcMain.handle(
     IPC_CHANNELS.APP_GET_BOOTSTRAP,
@@ -99,5 +187,46 @@ export function registerIpcHandlers(paths: CollectionPaths, appVersion: string):
       logger.info('Handling pt:v1:app:get-version IPC call');
       return createSuccessResult({ version: appVersion });
     }
+  );
+
+  registerCatalogHandler(IPC_CHANNELS.SETTINGS_GET, SettingsReadPayloadSchema, 'settings.get', () =>
+    catalogClient.readGeneralSettings()
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.TAGS_SUGGEST,
+    TagSuggestionsPayloadSchema,
+    'tags.suggest',
+    ({ query, limit }) => catalogClient.findTagSuggestions(query, limit)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_QUERY,
+    LibraryQueryPayloadSchema,
+    'library.query',
+    ({ query, options }) => catalogClient.queryLibrary(query, options)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_CREATE_SELECTION,
+    SelectionCreatePayloadSchema,
+    'library.createSelection',
+    ({ queryFingerprint, seed }) => catalogClient.createLibrarySelection(queryFingerprint, seed)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_UPDATE_SELECTION,
+    SelectionUpdatePayloadSchema,
+    'library.updateSelection',
+    ({ selectionId, photoIds, selected }) =>
+      catalogClient.updateLibrarySelection(selectionId, photoIds, selected)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_GET_SELECTION,
+    SelectionGetPayloadSchema,
+    'library.getSelection',
+    ({ selectionId }) => catalogClient.getLibrarySelection(selectionId)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_CLEAR_SELECTION,
+    SelectionClearPayloadSchema,
+    'library.clearSelection',
+    ({ selectionId }) => catalogClient.clearLibrarySelection(selectionId)
   );
 }

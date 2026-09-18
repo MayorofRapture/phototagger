@@ -2,6 +2,28 @@ import { utilityProcess, type UtilityProcess } from 'electron';
 import path from 'path';
 import type { ZodType } from 'zod';
 import {
+  LibraryPageResultDtoSchema,
+  LibraryQueryPayloadSchema,
+  ReadGeneralSettingsResultDtoSchema,
+  SelectionClearPayloadSchema,
+  SelectionClearResultDtoSchema,
+  SelectionCreatePayloadSchema,
+  SelectionGetPayloadSchema,
+  SelectionRefDtoSchema,
+  SelectionUpdatePayloadSchema,
+  SettingsReadPayloadSchema,
+  TagSuggestionDtoSchema,
+  TagSuggestionsPayloadSchema,
+  type LibraryPageOptionsDto,
+  type LibraryPageResultDto,
+  type LibraryQueryDto,
+  type ReadGeneralSettingsResultDto,
+  type SelectionClearResultDto,
+  type SelectionRefDto,
+  type SelectionSeedDto,
+  type TagSuggestionDto,
+} from '../../shared/contracts/catalog-api';
+import {
   CatalogResponseSchema,
   CatalogRequestType,
   CloseCatalogResultSchema,
@@ -87,6 +109,81 @@ export class CatalogClient {
 
   public async closeCatalog(): Promise<CloseCatalogResult> {
     return this.sendRequest(CatalogRequestType.CLOSE_CATALOG, {}, CloseCatalogResultSchema);
+  }
+
+  public async readGeneralSettings(): Promise<ReadGeneralSettingsResultDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.READ_GENERAL_SETTINGS,
+      {},
+      SettingsReadPayloadSchema,
+      ReadGeneralSettingsResultDtoSchema
+    );
+  }
+
+  public async findTagSuggestions(query: string, limit?: number): Promise<TagSuggestionDto[]> {
+    const payload = limit === undefined ? { query } : { query, limit };
+    return this.sendValidatedRequest(
+      CatalogRequestType.FIND_TAG_SUGGESTIONS,
+      payload,
+      TagSuggestionsPayloadSchema,
+      TagSuggestionDtoSchema.array().max(50)
+    );
+  }
+
+  public async queryLibrary(
+    query: LibraryQueryDto,
+    options?: LibraryPageOptionsDto
+  ): Promise<LibraryPageResultDto> {
+    const payload = options === undefined ? { query } : { query, options };
+    return this.sendValidatedRequest(
+      CatalogRequestType.QUERY_LIBRARY,
+      payload,
+      LibraryQueryPayloadSchema,
+      LibraryPageResultDtoSchema
+    );
+  }
+
+  public async createLibrarySelection(
+    queryFingerprint: string,
+    seed: SelectionSeedDto
+  ): Promise<SelectionRefDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.CREATE_SELECTION,
+      { queryFingerprint, seed },
+      SelectionCreatePayloadSchema,
+      SelectionRefDtoSchema
+    );
+  }
+
+  public async updateLibrarySelection(
+    selectionId: string,
+    photoIds: number[],
+    selected: boolean
+  ): Promise<SelectionRefDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.UPDATE_SELECTION,
+      { selectionId, photoIds, selected },
+      SelectionUpdatePayloadSchema,
+      SelectionRefDtoSchema
+    );
+  }
+
+  public async getLibrarySelection(selectionId: string): Promise<SelectionRefDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.GET_SELECTION,
+      { selectionId },
+      SelectionGetPayloadSchema,
+      SelectionRefDtoSchema
+    );
+  }
+
+  public async clearLibrarySelection(selectionId: string): Promise<SelectionClearResultDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.CLEAR_SELECTION,
+      { selectionId },
+      SelectionClearPayloadSchema,
+      SelectionClearResultDtoSchema
+    );
   }
 
   public async stop(): Promise<void> {
@@ -182,6 +279,16 @@ export class CatalogClient {
         new Error(`[${response.error.code}] ${response.error.message}`)
       );
     }
+  }
+
+  private sendValidatedRequest<TPayload, TResult>(
+    type: CatalogRequestType,
+    payload: TPayload,
+    payloadSchema: ZodType<TPayload>,
+    resultSchema: ZodType<TResult>
+  ): Promise<TResult> {
+    const validatedPayload = payloadSchema.parse(payload);
+    return this.sendRequest(type, validatedPayload, resultSchema);
   }
 
   private rejectMalformedResponse(requestId: string): void {
