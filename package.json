@@ -8,6 +8,7 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "test": "vitest run",
+    "test:performance": "tsx tests/performance/m1f-performance.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\""
