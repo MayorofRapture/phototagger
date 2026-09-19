@@ -3,16 +3,22 @@ import type { ZodType } from 'zod';
 import { IPC_CHANNELS, AppBootstrapDto, PhotoTaggerApi } from '../shared/contracts/ipc';
 import {
   LibraryQueryPayloadSchema,
+  PhotoGetDetailPayloadSchema,
   SelectionClearPayloadSchema,
   SelectionCreatePayloadSchema,
   SelectionGetPayloadSchema,
   SelectionUpdatePayloadSchema,
   SettingsReadPayloadSchema,
   TagSuggestionsPayloadSchema,
+  ViewSessionCreatePayloadSchema,
+  ViewSessionNavigatePayloadSchema,
   type LibraryPageOptionsDto,
   type LibraryPageResultDto,
   type LibraryQueryDto,
   type LibraryQueryPayload,
+  type LibraryViewSessionResultDto,
+  type PhotoDetailDto,
+  type PhotoGetDetailPayload,
   type ReadGeneralSettingsResultDto,
   type SelectionClearResultDto,
   type SelectionCreatePayload,
@@ -22,6 +28,9 @@ import {
   type SelectionUpdatePayload,
   type TagSuggestionDto,
   type TagSuggestionsPayload,
+  type ViewNavigationDirectionDto,
+  type ViewSessionCreatePayload,
+  type ViewSessionNavigatePayload,
 } from '../shared/contracts/catalog-api';
 import { createErrorResult, IpcResult } from '../shared/errors/app-error';
 
@@ -99,6 +108,29 @@ export const photoTaggerApi: PhotoTaggerApi = Object.freeze({
         IPC_CHANNELS.LIBRARY_CLEAR_SELECTION,
         SelectionClearPayloadSchema,
         { selectionId }
+      ),
+    createViewSession: async (queryFingerprint: string, selectedPhotoId: number) =>
+      invokeCatalog<ViewSessionCreatePayload, LibraryViewSessionResultDto>(
+        IPC_CHANNELS.LIBRARY_CREATE_VIEW_SESSION,
+        ViewSessionCreatePayloadSchema,
+        { queryFingerprint, selectedPhotoId }
+      ),
+    navigateView: async (
+      viewSessionId: string,
+      direction: ViewNavigationDirectionDto
+    ) =>
+      invokeCatalog<ViewSessionNavigatePayload, LibraryViewSessionResultDto>(
+        IPC_CHANNELS.LIBRARY_NAVIGATE_VIEW,
+        ViewSessionNavigatePayloadSchema,
+        { viewSessionId, direction }
+      ),
+  }),
+  photo: Object.freeze({
+    getDetail: async (photoId: number) =>
+      invokeCatalog<PhotoGetDetailPayload, PhotoDetailDto>(
+        IPC_CHANNELS.PHOTO_GET_DETAIL,
+        PhotoGetDetailPayloadSchema,
+        { photoId }
       ),
   }),
 });

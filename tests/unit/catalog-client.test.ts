@@ -85,6 +85,25 @@ describe('CatalogClient', () => {
     await expect(pingPromise).rejects.toThrow('Catalog process returned a malformed response');
   });
 
+  it('rejects malformed photo-detail responses before they reach main', async () => {
+    const client = new CatalogClient();
+    client.start();
+    const messageHandler = mockOn.mock.calls.find(call => call[0] === 'message')?.[1];
+    const detailPromise = client.getPhotoDetail(1);
+    const sentRequest = mockPostMessage.mock.calls[0][0];
+
+    messageHandler({
+      requestId: sentRequest.requestId,
+      success: true,
+      result: {
+        photoId: 1n,
+        canonicalFilename: '0000000001.jpg',
+      },
+    });
+
+    await expect(detailPromise).rejects.toThrow('malformed response');
+  });
+
   it('rejects pending promise on failure response', async () => {
     const client = new CatalogClient();
     client.start();
@@ -140,12 +159,33 @@ describe('CatalogClient', () => {
     const messageHandler = mockOn.mock.calls.find((call) => call[0] === 'message')?.[1];
     const fingerprint = 'a'.repeat(64);
     const selectionId = '00000000-0000-4000-8000-000000000001';
+    const viewSessionId = '00000000-0000-4000-8000-000000000002';
     const query = {
       tagIds: [],
       flaggedOnly: false,
       order: 'newest-imported' as const,
     };
     const selection = { selectionId, count: 0, catalogRevisionAtCapture: 2 };
+    const detail = {
+      photoId: 1,
+      canonicalFilename: '0000000001.jpg',
+      originalFilename: 'cat.jpg',
+      flagged: false,
+      integrityState: 'clean',
+      width: 1200,
+      height: 800,
+      contentRevision: 1,
+      thumbnailRevision: 1,
+      thumbnailUrl: 'pt-photo://thumb/1?thumb=1',
+      lifecycleState: 'active',
+      fullImageUrl: 'pt-photo://full/1?content=1',
+      explicitTags: [],
+      desiredMetadataRevision: 0,
+      syncedMetadataRevision: 0,
+      metadataState: 'synchronized',
+      importedAt: '2026-09-18T12:00:00.000Z',
+    };
+    const viewSession = { viewSessionId, position: 0, count: 1, detail };
     const requestIds = new Set<string>();
 
     async function expectRequest(
@@ -229,7 +269,25 @@ describe('CatalogClient', () => {
       { selectionId },
       { cleared: true }
     );
-    expect(requestIds.size).toBe(7);
+    await expectRequest(
+      () => client.getPhotoDetail(1),
+      'photo.getDetail',
+      { photoId: 1 },
+      detail
+    );
+    await expectRequest(
+      () => client.createLibraryViewSession(fingerprint, 1),
+      'library.createViewSession',
+      { queryFingerprint: fingerprint, selectedPhotoId: 1 },
+      viewSession
+    );
+    await expectRequest(
+      () => client.navigateLibraryViewSession(viewSessionId, 'next'),
+      'library.navigateView',
+      { viewSessionId, direction: 'next' },
+      viewSession
+    );
+    expect(requestIds.size).toBe(10);
   });
 
   it('rejects invalid M1E1 input before posting to the utility process', async () => {
@@ -240,6 +298,11 @@ describe('CatalogClient', () => {
     await expect(
       client.updateLibrarySelection('00000000-0000-4000-8000-000000000001', [0], true)
     ).rejects.toThrow();
+    await expect(client.getPhotoDetail(0)).rejects.toThrow();
+    await expect(client.navigateLibraryViewSession(
+      '00000000-0000-4000-8000-000000000001',
+      'sideways' as never
+    )).rejects.toThrow();
     expect(mockPostMessage).not.toHaveBeenCalled();
   });
 

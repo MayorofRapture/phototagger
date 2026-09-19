@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import {
   LibraryQueryPayloadSchema,
+  PhotoGetDetailPayloadSchema,
   SelectionClearPayloadSchema,
   SelectionCreatePayloadSchema,
   SelectionGetPayloadSchema,
   SelectionUpdatePayloadSchema,
   SettingsReadPayloadSchema,
   TagSuggestionsPayloadSchema,
+  ViewSessionCreatePayloadSchema,
+  ViewSessionNavigatePayloadSchema,
 } from './catalog-api';
 
 export const CatalogRequestType = {
@@ -21,6 +24,9 @@ export const CatalogRequestType = {
   UPDATE_SELECTION: 'selection.update',
   GET_SELECTION: 'selection.get',
   CLEAR_SELECTION: 'selection.clear',
+  GET_PHOTO_DETAIL: 'photo.getDetail',
+  CREATE_VIEW_SESSION: 'library.createViewSession',
+  NAVIGATE_VIEW_SESSION: 'library.navigateView',
 } as const;
 
 export type CatalogRequestType = (typeof CatalogRequestType)[keyof typeof CatalogRequestType];
@@ -95,6 +101,21 @@ export const CatalogRequestSchema = z.discriminatedUnion('type', [
     requestId: RequestIdSchema,
     type: z.literal(CatalogRequestType.CLEAR_SELECTION),
     payload: SelectionClearPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.GET_PHOTO_DETAIL),
+    payload: PhotoGetDetailPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.CREATE_VIEW_SESSION),
+    payload: ViewSessionCreatePayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.NAVIGATE_VIEW_SESSION),
+    payload: ViewSessionNavigatePayloadSchema,
   }).strict(),
 ]);
 

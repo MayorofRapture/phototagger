@@ -9,9 +9,11 @@ import {
 import { initializeNewCatalogState } from './migrations/initial-state';
 import { IssuedLibraryQueryRegistry } from './library/library-query-model';
 import { LibraryQueryService } from './queries/library-query';
+import { PhotoDetailQuery } from './queries/photo-detail';
 import { TagSuggestionsQuery } from './queries/tag-suggestions';
 import { SettingsRepository } from './repositories/settings-repository';
 import { LibrarySelectionService } from './sessions/library-selection-service';
+import { LibraryViewSessionService } from './sessions/library-view-session-service';
 import {
   CatalogResponseSchema,
   CatalogRequestSchema,
@@ -41,6 +43,8 @@ interface CatalogServices {
   tagSuggestions: TagSuggestionsQuery;
   libraryQueries: LibraryQueryService;
   librarySelections: LibrarySelectionService;
+  photoDetails: PhotoDetailQuery;
+  libraryViewSessions: LibraryViewSessionService;
 }
 
 export class CatalogProcessHandler {
@@ -212,6 +216,35 @@ export class CatalogProcessHandler {
             success: true,
             result: { cleared: true },
           };
+
+        case CatalogRequestType.GET_PHOTO_DETAIL:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().photoDetails.getPhotoDetail(
+              request.payload.photoId
+            ),
+          };
+
+        case CatalogRequestType.CREATE_VIEW_SESSION:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().libraryViewSessions.createViewSession(
+              request.payload.queryFingerprint,
+              request.payload.selectedPhotoId
+            ),
+          };
+
+        case CatalogRequestType.NAVIGATE_VIEW_SESSION:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().libraryViewSessions.navigateView(
+              request.payload.viewSessionId,
+              request.payload.direction
+            ),
+          };
       }
     } catch (error: unknown) {
       return {
@@ -325,6 +358,8 @@ export class CatalogProcessHandler {
       tagSuggestions: new TagSuggestionsQuery(database),
       libraryQueries: new LibraryQueryService(database, registry),
       librarySelections: new LibrarySelectionService(database, registry),
+      photoDetails: new PhotoDetailQuery(database),
+      libraryViewSessions: new LibraryViewSessionService(database, registry),
     };
   }
 

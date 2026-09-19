@@ -3,20 +3,26 @@ import type { ZodType } from 'zod';
 import { IPC_CHANNELS, AppBootstrapDto } from '../../shared/contracts/ipc';
 import {
   LibraryQueryPayloadSchema,
+  PhotoGetDetailPayloadSchema,
   SelectionClearPayloadSchema,
   SelectionCreatePayloadSchema,
   SelectionGetPayloadSchema,
   SelectionUpdatePayloadSchema,
   SettingsReadPayloadSchema,
   TagSuggestionsPayloadSchema,
+  ViewSessionCreatePayloadSchema,
+  ViewSessionNavigatePayloadSchema,
   type LibraryPageOptionsDto,
   type LibraryPageResultDto,
   type LibraryQueryDto,
+  type LibraryViewSessionResultDto,
+  type PhotoDetailDto,
   type ReadGeneralSettingsResultDto,
   type SelectionClearResultDto,
   type SelectionRefDto,
   type SelectionSeedDto,
   type TagSuggestionDto,
+  type ViewNavigationDirectionDto,
 } from '../../shared/contracts/catalog-api';
 import { createSuccessResult, createErrorResult, IpcResult } from '../../shared/errors/app-error';
 import { getBootstrapSchema, getVersionSchema } from '../../shared/validation/ipc-schemas';
@@ -41,6 +47,15 @@ export interface CatalogIpcClient {
   ): Promise<SelectionRefDto>;
   getLibrarySelection(selectionId: string): Promise<SelectionRefDto>;
   clearLibrarySelection(selectionId: string): Promise<SelectionClearResultDto>;
+  getPhotoDetail(photoId: number): Promise<PhotoDetailDto>;
+  createLibraryViewSession(
+    queryFingerprint: string,
+    selectedPhotoId: number
+  ): Promise<LibraryViewSessionResultDto>;
+  navigateLibraryViewSession(
+    viewSessionId: string,
+    direction: ViewNavigationDirectionDto
+  ): Promise<LibraryViewSessionResultDto>;
 }
 
 let mainWindowInstance: BrowserWindow | null = null;
@@ -228,5 +243,25 @@ export function registerIpcHandlers(
     SelectionClearPayloadSchema,
     'library.clearSelection',
     ({ selectionId }) => catalogClient.clearLibrarySelection(selectionId)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_CREATE_VIEW_SESSION,
+    ViewSessionCreatePayloadSchema,
+    'library.createViewSession',
+    ({ queryFingerprint, selectedPhotoId }) =>
+      catalogClient.createLibraryViewSession(queryFingerprint, selectedPhotoId)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.LIBRARY_NAVIGATE_VIEW,
+    ViewSessionNavigatePayloadSchema,
+    'library.navigateView',
+    ({ viewSessionId, direction }) =>
+      catalogClient.navigateLibraryViewSession(viewSessionId, direction)
+  );
+  registerCatalogHandler(
+    IPC_CHANNELS.PHOTO_GET_DETAIL,
+    PhotoGetDetailPayloadSchema,
+    'photo.getDetail',
+    ({ photoId }) => catalogClient.getPhotoDetail(photoId)
   );
 }

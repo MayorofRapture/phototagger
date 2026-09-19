@@ -4,6 +4,9 @@ import type { ZodType } from 'zod';
 import {
   LibraryPageResultDtoSchema,
   LibraryQueryPayloadSchema,
+  LibraryViewSessionResultDtoSchema,
+  PhotoDetailDtoSchema,
+  PhotoGetDetailPayloadSchema,
   ReadGeneralSettingsResultDtoSchema,
   SelectionClearPayloadSchema,
   SelectionClearResultDtoSchema,
@@ -14,14 +17,19 @@ import {
   SettingsReadPayloadSchema,
   TagSuggestionDtoSchema,
   TagSuggestionsPayloadSchema,
+  ViewSessionCreatePayloadSchema,
+  ViewSessionNavigatePayloadSchema,
   type LibraryPageOptionsDto,
   type LibraryPageResultDto,
   type LibraryQueryDto,
+  type LibraryViewSessionResultDto,
+  type PhotoDetailDto,
   type ReadGeneralSettingsResultDto,
   type SelectionClearResultDto,
   type SelectionRefDto,
   type SelectionSeedDto,
   type TagSuggestionDto,
+  type ViewNavigationDirectionDto,
 } from '../../shared/contracts/catalog-api';
 import {
   CatalogResponseSchema,
@@ -183,6 +191,39 @@ export class CatalogClient {
       { selectionId },
       SelectionClearPayloadSchema,
       SelectionClearResultDtoSchema
+    );
+  }
+
+  public async getPhotoDetail(photoId: number): Promise<PhotoDetailDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.GET_PHOTO_DETAIL,
+      { photoId },
+      PhotoGetDetailPayloadSchema,
+      PhotoDetailDtoSchema
+    );
+  }
+
+  public async createLibraryViewSession(
+    queryFingerprint: string,
+    selectedPhotoId: number
+  ): Promise<LibraryViewSessionResultDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.CREATE_VIEW_SESSION,
+      { queryFingerprint, selectedPhotoId },
+      ViewSessionCreatePayloadSchema,
+      LibraryViewSessionResultDtoSchema
+    );
+  }
+
+  public async navigateLibraryViewSession(
+    viewSessionId: string,
+    direction: ViewNavigationDirectionDto
+  ): Promise<LibraryViewSessionResultDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.NAVIGATE_VIEW_SESSION,
+      { viewSessionId, direction },
+      ViewSessionNavigatePayloadSchema,
+      LibraryViewSessionResultDtoSchema
     );
   }
 

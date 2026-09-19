@@ -16,6 +16,8 @@ import {
 } from '../../src/shared/contracts/catalog-process';
 import type {
   LibraryPageResultDto,
+  LibraryViewSessionResultDto,
+  PhotoDetailDto,
   ReadGeneralSettingsResultDto,
   SelectionRefDto,
   TagSuggestionDto,
@@ -165,6 +167,26 @@ describe('M1E1 catalog operation integration', () => {
     expect(page.nextCursor).toEqual(expect.any(String));
     expect(page.queryFingerprint).toMatch(/^[0-9a-f]{64}$/);
 
+    const detail = success<PhotoDetailDto>(handler, CatalogRequestType.GET_PHOTO_DETAIL, {
+      photoId: 2,
+    });
+    expect(detail).toMatchObject({
+      photoId: 2,
+      fullImageUrl: 'pt-photo://full/2?content=1',
+      explicitTags: [],
+    });
+    const view = success<LibraryViewSessionResultDto>(
+      handler,
+      CatalogRequestType.CREATE_VIEW_SESSION,
+      { queryFingerprint: page.queryFingerprint, selectedPhotoId: 2 }
+    );
+    expect(view).toMatchObject({ position: 1, count: 3, detail: { photoId: 2 } });
+    expect(success<LibraryViewSessionResultDto>(
+      handler,
+      CatalogRequestType.NAVIGATE_VIEW_SESSION,
+      { viewSessionId: view.viewSessionId, direction: 'next' }
+    )).toMatchObject({ position: 2, detail: { photoId: 1 } });
+
     const none = success<SelectionRefDto>(handler, CatalogRequestType.CREATE_SELECTION, {
       queryFingerprint: page.queryFingerprint,
       seed: { type: 'none' },
@@ -256,6 +278,11 @@ describe('M1E1 catalog operation integration', () => {
       queryFingerprint: page.queryFingerprint,
       seed: { type: 'all' },
     });
+    const view = success<LibraryViewSessionResultDto>(
+      handler,
+      CatalogRequestType.CREATE_VIEW_SESSION,
+      { queryFingerprint: page.queryFingerprint, selectedPhotoId: 2 }
+    );
     success(handler, CatalogRequestType.CLOSE_CATALOG, {});
     success(handler, CatalogRequestType.OPEN_CATALOG, {
       databasePath,
@@ -272,6 +299,10 @@ describe('M1E1 catalog operation integration', () => {
     failure(handler, CatalogRequestType.QUERY_LIBRARY, {
       query,
       options: { pageSize: 1, cursor: page.nextCursor },
+    });
+    failure(handler, CatalogRequestType.NAVIGATE_VIEW_SESSION, {
+      viewSessionId: view.viewSessionId,
+      direction: 'next',
     });
   });
 });

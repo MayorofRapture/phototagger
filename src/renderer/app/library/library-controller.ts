@@ -236,6 +236,26 @@ export class LibraryController {
     await this.loadFirstPage(generation, query);
   }
 
+  public async refreshCurrentQuery(): Promise<void> {
+    const query = this.state.query;
+    if (query === null) {
+      await this.initialize();
+      return;
+    }
+    const generation = ++this.queryGeneration;
+    this.setState({
+      ...this.state,
+      queryFingerprint: null,
+      photos: [],
+      totalCount: null,
+      nextCursor: null,
+      isInitialLoading: true,
+      isIncrementalLoading: false,
+      error: null,
+    });
+    await this.loadFirstPage(generation, query);
+  }
+
   public async togglePhoto(photoId: number): Promise<void> {
     const { queryFingerprint, selection } = this.state;
     if (!queryFingerprint || this.queryTransitionGeneration !== null) {
@@ -482,4 +502,15 @@ export class LibraryController {
       listener();
     }
   }
+}
+
+export function knownSoleSelectedPhotoId(state: LibraryState): number | null {
+  if (state.selection?.count !== 1) {
+    return null;
+  }
+  const selectedPhotos = state.photos.filter((photo) => {
+    const override = state.selectionOverrides[photo.photoId];
+    return override ?? state.selectionMode === 'all';
+  });
+  return selectedPhotos.length === 1 ? selectedPhotos[0].photoId : null;
 }

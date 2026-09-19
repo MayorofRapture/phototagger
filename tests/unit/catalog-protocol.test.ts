@@ -12,6 +12,7 @@ import {
 
 const fingerprint = 'a'.repeat(64);
 const selectionId = '00000000-0000-4000-8000-000000000001';
+const viewSessionId = '00000000-0000-4000-8000-000000000002';
 const libraryQuery = {
   tagIds: [2, 1, 2],
   flaggedOnly: false,
@@ -121,6 +122,31 @@ describe('M1E1 catalog transport contracts', () => {
     ).toBe(false);
   });
 
+  it('strictly validates photo detail and Image View session requests', () => {
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.GET_PHOTO_DETAIL, {
+      photoId: 1,
+    })).success).toBe(true);
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.GET_PHOTO_DETAIL, {
+      photoId: 0,
+    })).success).toBe(false);
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.CREATE_VIEW_SESSION, {
+      queryFingerprint: fingerprint,
+      selectedPhotoId: 1,
+    })).success).toBe(true);
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.CREATE_VIEW_SESSION, {
+      queryFingerprint: 'fabricated',
+      selectedPhotoId: 1,
+    })).success).toBe(false);
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.NAVIGATE_VIEW_SESSION, {
+      viewSessionId,
+      direction: 'previous',
+    })).success).toBe(true);
+    expect(CatalogRequestSchema.safeParse(request(CatalogRequestType.NAVIGATE_VIEW_SESSION, {
+      viewSessionId,
+      direction: 'sideways',
+    })).success).toBe(false);
+  });
+
   it('rejects unknown operations', () => {
     expect(CatalogRequestSchema.safeParse(request('catalog.call', {})).success).toBe(false);
   });
@@ -192,6 +218,30 @@ describe('M1E1 catalog transport contracts', () => {
         nextCursor: null,
       },
       { selectionId, count: 1, catalogRevisionAtCapture: 2 },
+      {
+        viewSessionId,
+        position: 0,
+        count: 1,
+        detail: {
+          photoId: 1,
+          canonicalFilename: '0000000001.jpg',
+          originalFilename: 'cat.jpg',
+          flagged: false,
+          integrityState: 'clean',
+          width: 1200,
+          height: 800,
+          contentRevision: 1,
+          thumbnailRevision: 1,
+          thumbnailUrl: 'pt-photo://thumb/1?thumb=1',
+          lifecycleState: 'active',
+          fullImageUrl: 'pt-photo://full/1?content=1',
+          explicitTags: [],
+          desiredMetadataRevision: 0,
+          syncedMetadataRevision: 0,
+          metadataState: 'synchronized',
+          importedAt: '2026-09-18T12:00:00.000Z',
+        },
+      },
     ];
 
     for (const [index, result] of representativeResults.entries()) {
@@ -205,6 +255,13 @@ describe('M1E1 catalog transport contracts', () => {
         requestId: 'unsafe-function',
         success: true,
         result: { callback: () => undefined },
+      }).success
+    ).toBe(false);
+    expect(
+      CatalogResponseSchema.safeParse({
+        requestId: 'unsafe-view',
+        success: true,
+        result: { viewSessionId, position: 0n },
       }).success
     ).toBe(false);
     expect(

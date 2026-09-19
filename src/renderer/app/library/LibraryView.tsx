@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ChangeEvent, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactElement } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { LibraryOrderDto, PhotoSummaryDto } from '../../../shared/contracts/catalog-api';
-import { createLibraryRendererApi } from './library-api';
 import { LibraryController, type LibraryState } from './library-controller';
 import {
   calculateLibraryColumns,
@@ -16,27 +15,17 @@ const SORT_OPTIONS: Array<{ value: LibraryOrderDto; label: string }> = [
   { value: 'original-filename-desc', label: 'Original filename Z-A' },
 ];
 
-function useLibraryController(): { controller: LibraryController; state: LibraryState } {
-  const controllerRef = useRef<LibraryController | null>(null);
-  if (controllerRef.current === null) {
-    controllerRef.current = new LibraryController(createLibraryRendererApi());
-  }
-  const controller = controllerRef.current;
-  const state = useSyncExternalStore(controller.subscribe.bind(controller), controller.getSnapshot);
-
-  useEffect(() => {
-    void controller.initialize();
-    return () => controller.dispose();
-  }, [controller]);
-
-  return { controller, state };
-}
-
-export function LibraryView(): ReactElement {
-  const { controller, state } = useLibraryController();
-
+export function LibraryView({
+  controller,
+  state,
+  hidden = false,
+}: {
+  controller: LibraryController;
+  state: LibraryState;
+  hidden?: boolean;
+}): ReactElement {
   return (
-    <section className="library-view" aria-label="Library View">
+    <section className="library-view" aria-label="Library View" hidden={hidden}>
       <LibraryFilters controller={controller} state={state} />
       <LibrarySelectionControls controller={controller} state={state} />
       {state.error?.scope === 'initial' ? (
@@ -192,7 +181,7 @@ function ThumbnailGrid({ controller, state }: { controller: LibraryController; s
     const observer = new ResizeObserver(updateGridSize);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [state.isInitialLoading]);
 
   useEffect(() => {
     const finalVirtualRow = virtualRows[virtualRows.length - 1];

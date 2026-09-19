@@ -8,7 +8,10 @@ import type {
 } from '../../src/shared/contracts/catalog-api';
 import { createSuccessResult, type IpcResult } from '../../src/shared/errors/app-error';
 import type { LibraryRendererApi } from '../../src/renderer/app/library/library-api';
-import { LibraryController } from '../../src/renderer/app/library/library-controller';
+import {
+  LibraryController,
+  knownSoleSelectedPhotoId,
+} from '../../src/renderer/app/library/library-controller';
 
 const FINGERPRINT = 'a'.repeat(64);
 const SELECTION_ID = 'a0f0a4ed-5ca8-4012-bae0-f8a73f80d2a1';
@@ -270,5 +273,45 @@ describe('LibraryController', () => {
     expect(controller.getSnapshot().error?.scope).toBe('incremental');
     await controller.retry();
     expect(api.queryLibrary).toHaveBeenLastCalledWith(expect.anything(), { cursor: 'again', pageSize: 200 });
+  });
+
+  it('proves a sole selected photo only when its identity is known from loaded state', () => {
+    const base = {
+      ...new LibraryController(makeApi()).getSnapshot(),
+      photos: [photo(1), photo(2)],
+      selection: selection(1),
+      selectionMode: 'explicit' as const,
+      selectionOverrides: { 1: true, 2: false },
+    };
+    expect(knownSoleSelectedPhotoId(base)).toBe(1);
+    expect(knownSoleSelectedPhotoId({ ...base, selection: selection(2) })).toBeNull();
+    expect(knownSoleSelectedPhotoId({
+      ...base,
+      selectionMode: 'all',
+      selectionOverrides: {},
+      photos: [photo(1)],
+    })).toBe(1);
+    expect(knownSoleSelectedPhotoId({
+      ...base,
+      selectionMode: 'explicit',
+      selectionOverrides: {},
+    })).toBeNull();
+  });
+
+  it('refreshes the current query without discarding filters or selection', async () => {
+    const api = makeApi();
+    const controller = new LibraryController(api);
+    await controller.initialize();
+    await controller.setFlaggedOnly(true);
+    await controller.togglePhoto(1);
+    const before = controller.getSnapshot();
+
+    await controller.refreshCurrentQuery();
+
+    expect(controller.getSnapshot().query).toEqual(before.query);
+    expect(controller.getSnapshot().selection).toEqual(before.selection);
+    expect(controller.getSnapshot().selectionOverrides).toEqual(before.selectionOverrides);
+    expect(api.clearSelection).not.toHaveBeenCalled();
+    expect(api.queryLibrary).toHaveBeenLastCalledWith(before.query, { pageSize: 200 });
   });
 });

@@ -10,9 +10,12 @@ import { initLogger } from './services/logger';
 import { registerIpcHandlers, setMainWindow } from './ipc/register';
 import { CatalogClient } from './catalog/catalog-client';
 import { CatalogLifecycle } from './catalog/catalog-lifecycle';
+import { registerPhotoProtocol, registerPhotoScheme } from './protocols/photo-protocol';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+
+registerPhotoScheme();
 
 // Single instance enforcement
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
@@ -77,6 +80,7 @@ const createWindow = (): void => {
 app.whenReady().then(async () => {
   configureSecurityPolicies();
   await catalogLifecycle.start(collectionPaths);
+  registerPhotoProtocol(collectionPaths, catalogClient);
   registerIpcHandlers(collectionPaths, app.getVersion() || '1.0.0', catalogClient);
   createWindow();
 

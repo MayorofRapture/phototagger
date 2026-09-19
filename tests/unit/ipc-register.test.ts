@@ -20,6 +20,27 @@ const query = {
   order: 'newest-imported' as const,
 };
 const selection = { selectionId, count: 0, catalogRevisionAtCapture: 0 };
+const viewSessionId = '00000000-0000-4000-8000-000000000002';
+const photoDetail = {
+  photoId: 1,
+  canonicalFilename: '0000000001.jpg',
+  originalFilename: 'cat.jpg',
+  flagged: false,
+  integrityState: 'clean' as const,
+  width: 1200,
+  height: 800,
+  contentRevision: 1,
+  thumbnailRevision: 1,
+  thumbnailUrl: 'pt-photo://thumb/1?thumb=1',
+  lifecycleState: 'active' as const,
+  fullImageUrl: 'pt-photo://full/1?content=1',
+  explicitTags: [],
+  desiredMetadataRevision: 0,
+  syncedMetadataRevision: 0,
+  metadataState: 'synchronized' as const,
+  importedAt: '2026-09-18T12:00:00.000Z',
+};
+const viewSession = { viewSessionId, position: 0, count: 1, detail: photoDetail };
 
 function createCatalogClient(): CatalogIpcClient {
   return {
@@ -43,6 +64,9 @@ function createCatalogClient(): CatalogIpcClient {
     updateLibrarySelection: vi.fn().mockResolvedValue(selection),
     getLibrarySelection: vi.fn().mockResolvedValue(selection),
     clearLibrarySelection: vi.fn().mockResolvedValue({ cleared: true }),
+    getPhotoDetail: vi.fn().mockResolvedValue(photoDetail),
+    createLibraryViewSession: vi.fn().mockResolvedValue(viewSession),
+    navigateLibraryViewSession: vi.fn().mockResolvedValue(viewSession),
   };
 }
 
@@ -75,11 +99,14 @@ describe('M1E1 main IPC registration', () => {
         IPC_CHANNELS.APP_GET_VERSION,
         IPC_CHANNELS.LIBRARY_CLEAR_SELECTION,
         IPC_CHANNELS.LIBRARY_CREATE_SELECTION,
+        IPC_CHANNELS.LIBRARY_CREATE_VIEW_SESSION,
         IPC_CHANNELS.LIBRARY_GET_SELECTION,
         IPC_CHANNELS.LIBRARY_QUERY,
+        IPC_CHANNELS.LIBRARY_NAVIGATE_VIEW,
         IPC_CHANNELS.LIBRARY_UPDATE_SELECTION,
         IPC_CHANNELS.SETTINGS_GET,
         IPC_CHANNELS.TAGS_SUGGEST,
+        IPC_CHANNELS.PHOTO_GET_DETAIL,
       ].sort()
     );
   });
@@ -109,6 +136,15 @@ describe('M1E1 main IPC registration', () => {
     await registeredHandler(IPC_CHANNELS.LIBRARY_CLEAR_SELECTION)(event, {
       selectionId,
     });
+    await registeredHandler(IPC_CHANNELS.PHOTO_GET_DETAIL)(event, { photoId: 1 });
+    await registeredHandler(IPC_CHANNELS.LIBRARY_CREATE_VIEW_SESSION)(event, {
+      queryFingerprint: fingerprint,
+      selectedPhotoId: 1,
+    });
+    await registeredHandler(IPC_CHANNELS.LIBRARY_NAVIGATE_VIEW)(event, {
+      viewSessionId,
+      direction: 'next',
+    });
 
     expect(client.readGeneralSettings).toHaveBeenCalledWith();
     expect(client.findTagSuggestions).toHaveBeenCalledWith('cat', 10);
@@ -119,6 +155,9 @@ describe('M1E1 main IPC registration', () => {
     expect(client.updateLibrarySelection).toHaveBeenCalledWith(selectionId, [1, 2], false);
     expect(client.getLibrarySelection).toHaveBeenCalledWith(selectionId);
     expect(client.clearLibrarySelection).toHaveBeenCalledWith(selectionId);
+    expect(client.getPhotoDetail).toHaveBeenCalledWith(1);
+    expect(client.createLibraryViewSession).toHaveBeenCalledWith(fingerprint, 1);
+    expect(client.navigateLibraryViewSession).toHaveBeenCalledWith(viewSessionId, 'next');
   });
 
   it('rejects malformed renderer input before delegation', async () => {
@@ -135,6 +174,12 @@ describe('M1E1 main IPC registration', () => {
       },
     });
     expect(client.queryLibrary).not.toHaveBeenCalled();
+
+    const invalidNavigation = await registeredHandler(
+      IPC_CHANNELS.LIBRARY_NAVIGATE_VIEW
+    )(event, { viewSessionId, direction: 'sideways' });
+    expect(invalidNavigation).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
+    expect(client.navigateLibraryViewSession).not.toHaveBeenCalled();
   });
 
   it('rejects a non-window sender before delegation', async () => {

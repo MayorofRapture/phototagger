@@ -205,6 +205,22 @@ export function buildFilteredPhotoIdsSelect(query: LibraryQuery): BuiltLibrarySq
   };
 }
 
+export function buildOrderedPhotoIdsWithPositionsSelect(query: LibraryQuery): BuiltLibrarySql {
+  const filter = buildFilterParts(query);
+  const ordering = libraryOrderSql(query.order);
+  return {
+    sql: `${filter.withClause}
+      SELECT
+        p.photo_id,
+        ROW_NUMBER() OVER (ORDER BY ${ordering}) - 1 AS position
+      FROM photos AS p
+      ${filter.matchingJoin}
+      WHERE ${filter.predicates.join('\n        AND ')}
+      ORDER BY ${ordering}`,
+    parameters: filter.parameters,
+  };
+}
+
 export function photoBelongsToLibraryQuery(
   database: CatalogDatabase,
   query: LibraryQuery,
@@ -309,7 +325,7 @@ function decodeCursor(cursor: string): CursorPayload {
   };
 }
 
-function orderSql(order: LibraryOrder): string {
+export function libraryOrderSql(order: LibraryOrder): string {
   switch (order) {
     case 'newest-imported':
       return 'p.photo_id DESC';
@@ -493,7 +509,7 @@ export class LibraryQueryService {
       FROM photos AS p
       ${filter.matchingJoin}
       WHERE ${predicates.join('\n        AND ')}
-      ORDER BY ${orderSql(query.order)}
+      ORDER BY ${libraryOrderSql(query.order)}
       LIMIT @page_limit
     `).all(parameters) as PhotoRow[];
     return rows.map(toPhotoSummary);

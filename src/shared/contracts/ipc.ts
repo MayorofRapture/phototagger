@@ -2,11 +2,14 @@ import type {
   LibraryPageOptionsDto,
   LibraryPageResultDto,
   LibraryQueryDto,
+  LibraryViewSessionResultDto,
+  PhotoDetailDto,
   ReadGeneralSettingsResultDto,
   SelectionClearResultDto,
   SelectionRefDto,
   SelectionSeedDto,
   TagSuggestionDto,
+  ViewNavigationDirectionDto,
 } from './catalog-api';
 import type { IpcResult } from '../errors/app-error';
 
@@ -21,6 +24,9 @@ export const IPC_CHANNELS = {
   LIBRARY_UPDATE_SELECTION: 'pt:v1:library:update-selection',
   LIBRARY_GET_SELECTION: 'pt:v1:library:get-selection',
   LIBRARY_CLEAR_SELECTION: 'pt:v1:library:clear-selection',
+  LIBRARY_CREATE_VIEW_SESSION: 'pt:v1:library:create-view-session',
+  LIBRARY_NAVIGATE_VIEW: 'pt:v1:library:navigate-view',
+  PHOTO_GET_DETAIL: 'pt:v1:photo:get-detail',
 } as const;
 
 export interface AppBootstrapDto {
@@ -65,6 +71,17 @@ export interface PhotoTaggerApi {
     ) => Promise<IpcResult<SelectionRefDto>>;
     getSelection: (selectionId: string) => Promise<IpcResult<SelectionRefDto>>;
     clearSelection: (selectionId: string) => Promise<IpcResult<SelectionClearResultDto>>;
+    createViewSession: (
+      queryFingerprint: string,
+      selectedPhotoId: number
+    ) => Promise<IpcResult<LibraryViewSessionResultDto>>;
+    navigateView: (
+      viewSessionId: string,
+      direction: ViewNavigationDirectionDto
+    ) => Promise<IpcResult<LibraryViewSessionResultDto>>;
+  };
+  photo: {
+    getDetail: (photoId: number) => Promise<IpcResult<PhotoDetailDto>>;
   };
 }
 

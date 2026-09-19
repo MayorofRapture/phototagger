@@ -7,6 +7,7 @@ const PositiveSafeIntegerSchema = z.number().int().positive().refine(Number.isSa
 const NonNegativeSafeIntegerSchema = z.number().int().nonnegative().refine(Number.isSafeInteger);
 const QueryFingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/);
 const SelectionIdSchema = z.string().uuid();
+const ViewSessionIdSchema = z.string().uuid();
 
 export const GeneralSettingsDtoSchema = z
   .object({
@@ -47,7 +48,7 @@ export const ReadGeneralSettingsResultDtoSchema = z
 
 export type ReadGeneralSettingsResultDto = z.infer<typeof ReadGeneralSettingsResultDtoSchema>;
 
-export const TagSuggestionDtoSchema = z
+export const TagPathDtoSchema = z
   .object({
     tagId: PositiveSafeIntegerSchema,
     parentTagId: PositiveSafeIntegerSchema.nullable(),
@@ -60,7 +61,10 @@ export const TagSuggestionDtoSchema = z
   })
   .strict();
 
-export type TagSuggestionDto = z.infer<typeof TagSuggestionDtoSchema>;
+export type TagPathDto = z.infer<typeof TagPathDtoSchema>;
+
+export const TagSuggestionDtoSchema = TagPathDtoSchema;
+export type TagSuggestionDto = TagPathDto;
 
 export const LibraryOrderSchema = z.enum([
   'newest-imported',
@@ -119,6 +123,29 @@ export const PhotoSummaryDtoSchema = z
   .strict();
 
 export type PhotoSummaryDto = z.infer<typeof PhotoSummaryDtoSchema>;
+
+export const PhotoDetailDtoSchema = PhotoSummaryDtoSchema.extend({
+  lifecycleState: z.enum(['active', 'trashed']),
+  fullImageUrl: z
+    .string()
+    .regex(/^pt-photo:\/\/full\/[1-9][0-9]*\?content=[1-9][0-9]*$/)
+    .optional(),
+  explicitTags: z.array(TagPathDtoSchema).max(MAX_EXACT_ID_LIST_LENGTH),
+  desiredMetadataRevision: NonNegativeSafeIntegerSchema,
+  syncedMetadataRevision: NonNegativeSafeIntegerSchema,
+  metadataState: z.enum([
+    'synchronized',
+    'pending',
+    'writing',
+    'failed',
+    'suspended_conflict',
+    'synchronized_with_warning',
+  ]),
+  importedAt: z.string().datetime({ offset: true }),
+  lastVerifiedAt: z.string().datetime({ offset: true }).optional(),
+}).strict();
+
+export type PhotoDetailDto = z.infer<typeof PhotoDetailDtoSchema>;
 
 export const LibraryPageResultDtoSchema = z
   .object({
@@ -211,8 +238,48 @@ export const SelectionClearResultDtoSchema = z
 
 export type SelectionClearResultDto = z.infer<typeof SelectionClearResultDtoSchema>;
 
+export const PhotoGetDetailPayloadSchema = z
+  .object({
+    photoId: PositiveSafeIntegerSchema,
+  })
+  .strict();
+
+export const ViewSessionCreatePayloadSchema = z
+  .object({
+    queryFingerprint: QueryFingerprintSchema,
+    selectedPhotoId: PositiveSafeIntegerSchema,
+  })
+  .strict();
+
+export const ViewNavigationDirectionSchema = z.enum(['previous', 'next']);
+export type ViewNavigationDirectionDto = z.infer<typeof ViewNavigationDirectionSchema>;
+
+export const ViewSessionNavigatePayloadSchema = z
+  .object({
+    viewSessionId: ViewSessionIdSchema,
+    direction: ViewNavigationDirectionSchema,
+  })
+  .strict();
+
+export const LibraryViewSessionResultDtoSchema = z
+  .object({
+    viewSessionId: ViewSessionIdSchema,
+    position: NonNegativeSafeIntegerSchema,
+    count: PositiveSafeIntegerSchema,
+    detail: PhotoDetailDtoSchema,
+  })
+  .strict()
+  .refine((value) => value.position < value.count, {
+    message: 'View session position must be within the sequence',
+  });
+
+export type LibraryViewSessionResultDto = z.infer<typeof LibraryViewSessionResultDtoSchema>;
+
 export type TagSuggestionsPayload = z.infer<typeof TagSuggestionsPayloadSchema>;
 export type LibraryQueryPayload = z.infer<typeof LibraryQueryPayloadSchema>;
 export type SelectionCreatePayload = z.infer<typeof SelectionCreatePayloadSchema>;
 export type SelectionUpdatePayload = z.infer<typeof SelectionUpdatePayloadSchema>;
 export type SelectionGetPayload = z.infer<typeof SelectionGetPayloadSchema>;
+export type PhotoGetDetailPayload = z.infer<typeof PhotoGetDetailPayloadSchema>;
+export type ViewSessionCreatePayload = z.infer<typeof ViewSessionCreatePayloadSchema>;
+export type ViewSessionNavigatePayload = z.infer<typeof ViewSessionNavigatePayloadSchema>;
