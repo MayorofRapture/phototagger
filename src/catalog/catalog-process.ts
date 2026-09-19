@@ -12,6 +12,7 @@ import { LibraryQueryService } from './queries/library-query';
 import { PhotoDetailQuery } from './queries/photo-detail';
 import { TagSuggestionsQuery } from './queries/tag-suggestions';
 import { SettingsRepository } from './repositories/settings-repository';
+import { CatalogOperationError, ImportRepository } from './repositories/import-repository';
 import { LibrarySelectionService } from './sessions/library-selection-service';
 import { LibraryViewSessionService } from './sessions/library-view-session-service';
 import {
@@ -40,6 +41,7 @@ const defaultDependencies: CatalogProcessDependencies = {
 
 interface CatalogServices {
   settings: SettingsRepository;
+  imports: ImportRepository;
   tagSuggestions: TagSuggestionsQuery;
   libraryQueries: LibraryQueryService;
   librarySelections: LibrarySelectionService;
@@ -245,14 +247,91 @@ export class CatalogProcessHandler {
               request.payload.direction
             ),
           };
+
+        case CatalogRequestType.CREATE_IMPORT_BATCH:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.createBatch(request.payload),
+          };
+
+        case CatalogRequestType.GET_IMPORT_BATCH:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.getBatch(request.payload),
+          };
+
+        case CatalogRequestType.GET_IMPORT_JOB:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.getJob(request.payload),
+          };
+
+        case CatalogRequestType.LIST_IMPORT_JOBS:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.listJobs(request.payload),
+          };
+
+        case CatalogRequestType.TRANSITION_IMPORT_JOB:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.transitionJob(request.payload),
+          };
+
+        case CatalogRequestType.REQUEST_IMPORT_STOP:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.requestStop(request.payload),
+          };
+
+        case CatalogRequestType.RESERVE_IMPORT_PHOTO_ID:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.reservePhotoId(request.payload),
+          };
+
+        case CatalogRequestType.COMMIT_IMPORT_PHOTO_ID:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.commitReservation(request.payload),
+          };
+
+        case CatalogRequestType.ABANDON_IMPORT_PHOTO_ID:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.abandonReservation(request.payload),
+          };
+
+        case CatalogRequestType.CREATE_OPERATION_JOURNAL_INTENT:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.createJournalIntent(request.payload),
+          };
+
+        case CatalogRequestType.TRANSITION_OPERATION_JOURNAL:
+          return {
+            requestId: request.requestId,
+            success: true,
+            result: this.requireServices().imports.transitionJournal(request.payload),
+          };
       }
     } catch (error: unknown) {
       return {
         requestId: request.requestId,
         success: false,
         error: {
-          code: 'EXECUTION_ERROR',
-          message: error instanceof Error ? error.message : String(error),
+          code: error instanceof CatalogOperationError ? error.code : 'EXECUTION_ERROR',
+          message: error instanceof Error ? error.message : 'Catalog operation failed',
         },
       };
     }
@@ -355,6 +434,7 @@ export class CatalogProcessHandler {
     const registry = new IssuedLibraryQueryRegistry();
     return {
       settings: new SettingsRepository(database),
+      imports: new ImportRepository(database),
       tagSuggestions: new TagSuggestionsQuery(database),
       libraryQueries: new LibraryQueryService(database, registry),
       librarySelections: new LibrarySelectionService(database, registry),

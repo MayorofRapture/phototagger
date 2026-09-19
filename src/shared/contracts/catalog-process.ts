@@ -11,6 +11,14 @@ import {
   ViewSessionCreatePayloadSchema,
   ViewSessionNavigatePayloadSchema,
 } from './catalog-api';
+import {
+  CreateImportBatchPayloadSchema,
+  CreateJournalIntentPayloadSchema,
+  ImportBatchIdPayloadSchema,
+  ImportJobIdPayloadSchema,
+  TransitionImportJobPayloadSchema,
+  TransitionJournalPayloadSchema,
+} from './import-catalog';
 
 export const CatalogRequestType = {
   PING: 'ping',
@@ -27,6 +35,17 @@ export const CatalogRequestType = {
   GET_PHOTO_DETAIL: 'photo.getDetail',
   CREATE_VIEW_SESSION: 'library.createViewSession',
   NAVIGATE_VIEW_SESSION: 'library.navigateView',
+  CREATE_IMPORT_BATCH: 'imports.createBatch',
+  GET_IMPORT_BATCH: 'imports.getBatch',
+  GET_IMPORT_JOB: 'imports.getJob',
+  LIST_IMPORT_JOBS: 'imports.listJobs',
+  TRANSITION_IMPORT_JOB: 'imports.transitionJob',
+  REQUEST_IMPORT_STOP: 'imports.requestStop',
+  RESERVE_IMPORT_PHOTO_ID: 'imports.reservePhotoId',
+  COMMIT_IMPORT_PHOTO_ID: 'imports.commitPhotoId',
+  ABANDON_IMPORT_PHOTO_ID: 'imports.abandonPhotoId',
+  CREATE_OPERATION_JOURNAL_INTENT: 'journal.createIntent',
+  TRANSITION_OPERATION_JOURNAL: 'journal.transition',
 } as const;
 
 export type CatalogRequestType = (typeof CatalogRequestType)[keyof typeof CatalogRequestType];
@@ -116,6 +135,61 @@ export const CatalogRequestSchema = z.discriminatedUnion('type', [
     requestId: RequestIdSchema,
     type: z.literal(CatalogRequestType.NAVIGATE_VIEW_SESSION),
     payload: ViewSessionNavigatePayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.CREATE_IMPORT_BATCH),
+    payload: CreateImportBatchPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.GET_IMPORT_BATCH),
+    payload: ImportBatchIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.GET_IMPORT_JOB),
+    payload: ImportJobIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.LIST_IMPORT_JOBS),
+    payload: ImportBatchIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.TRANSITION_IMPORT_JOB),
+    payload: TransitionImportJobPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.REQUEST_IMPORT_STOP),
+    payload: ImportBatchIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.RESERVE_IMPORT_PHOTO_ID),
+    payload: ImportJobIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.COMMIT_IMPORT_PHOTO_ID),
+    payload: ImportJobIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.ABANDON_IMPORT_PHOTO_ID),
+    payload: ImportJobIdPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.CREATE_OPERATION_JOURNAL_INTENT),
+    payload: CreateJournalIntentPayloadSchema,
+  }).strict(),
+  z.object({
+    requestId: RequestIdSchema,
+    type: z.literal(CatalogRequestType.TRANSITION_OPERATION_JOURNAL),
+    payload: TransitionJournalPayloadSchema,
   }).strict(),
 ]);
 

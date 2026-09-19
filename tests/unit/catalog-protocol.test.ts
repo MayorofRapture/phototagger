@@ -24,6 +24,64 @@ function request(type: string, payload: unknown): unknown {
 }
 
 describe('M1E1 catalog transport contracts', () => {
+  it('strictly validates internal M2A import and journal commands without exposing renderer IPC', () => {
+    const batchId = '00000000-0000-4000-8000-000000000100';
+    const jobId = '00000000-0000-4000-8000-000000000101';
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.CREATE_IMPORT_BATCH, {
+          batchId,
+          snapshotAt: '2026-09-20T12:00:00.000Z',
+          entries: [{
+            jobId,
+            ordinal: 0,
+            originalFilename: 'cat.jpg',
+            sourceRelativePath: 'Inbox/cat.jpg',
+          }],
+        })
+      ).success
+    ).toBe(true);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.CREATE_IMPORT_BATCH, {
+          batchId,
+          snapshotAt: '2026-09-20T12:00:00.000Z',
+          entries: [{
+            jobId,
+            ordinal: 0,
+            originalFilename: 'cat.jpg',
+            sourceRelativePath: 'C:/outside/cat.jpg',
+          }],
+        })
+      ).success
+    ).toBe(false);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.CREATE_OPERATION_JOURNAL_INTENT, {
+          operationId: '00000000-0000-4000-8000-000000000102',
+          operationType: 'import_move',
+          phase: 'move_source_to_storage',
+          importJobId: jobId,
+          batchId,
+          sourceRelativePath: 'Inbox/cat.jpg',
+          targetRelativePath: 'Storage/0000000001.jpg',
+          expectedSourceSha256Hex: 'ab'.repeat(32),
+        })
+      ).success
+    ).toBe(true);
+    expect(
+      CatalogRequestSchema.safeParse(
+        request(CatalogRequestType.TRANSITION_IMPORT_JOB, {
+          jobId,
+          state: 'running',
+          phase: 'hashing',
+          measurements: { sourceSha256Hex: 'not-a-hash' },
+        })
+      ).success
+    ).toBe(false);
+  });
+
+
   it('accepts settings read and rejects unknown payload fields', () => {
     expect(
       CatalogRequestSchema.safeParse(request(CatalogRequestType.READ_GENERAL_SETTINGS, {})).success

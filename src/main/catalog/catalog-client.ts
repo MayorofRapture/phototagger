@@ -44,6 +44,32 @@ import {
   type OpenCatalogResult,
   type PingResult,
 } from '../../shared/contracts/catalog-process';
+import {
+  CreateImportBatchPayloadSchema,
+  CreateImportBatchResultSchema,
+  CreateJournalIntentPayloadSchema,
+  IdReservationResultSchema,
+  ImportBatchDtoSchema,
+  ImportBatchIdPayloadSchema,
+  ImportBatchResultSchema,
+  ImportJobDtoSchema,
+  ImportJobIdPayloadSchema,
+  ImportJobTransitionResultSchema,
+  JournalResultSchema,
+  TransitionImportJobPayloadSchema,
+  TransitionJournalPayloadSchema,
+  type CreateImportBatchPayload,
+  type CreateImportBatchResult,
+  type CreateJournalIntentPayload,
+  type IdReservationResult,
+  type ImportBatchDto,
+  type ImportBatchResult,
+  type ImportJobDto,
+  type ImportJobTransitionResult,
+  type JournalResult,
+  type TransitionImportJobPayload,
+  type TransitionJournalPayload,
+} from '../../shared/contracts/import-catalog';
 
 export interface CatalogClientOptions {
   entryPath?: string;
@@ -224,6 +250,112 @@ export class CatalogClient {
       { viewSessionId, direction },
       ViewSessionNavigatePayloadSchema,
       LibraryViewSessionResultDtoSchema
+    );
+  }
+
+  /** Internal main-to-catalog import foundation; never exposed through preload. */
+  public async createImportBatch(input: CreateImportBatchPayload): Promise<CreateImportBatchResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.CREATE_IMPORT_BATCH,
+      input,
+      CreateImportBatchPayloadSchema,
+      CreateImportBatchResultSchema
+    );
+  }
+
+  public async getImportBatch(batchId: string): Promise<ImportBatchDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.GET_IMPORT_BATCH,
+      { batchId },
+      ImportBatchIdPayloadSchema,
+      ImportBatchDtoSchema
+    );
+  }
+
+  public async getImportJob(jobId: string): Promise<ImportJobDto> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.GET_IMPORT_JOB,
+      { jobId },
+      ImportJobIdPayloadSchema,
+      ImportJobDtoSchema
+    );
+  }
+
+  public async listImportJobs(batchId: string): Promise<ImportJobDto[]> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.LIST_IMPORT_JOBS,
+      { batchId },
+      ImportBatchIdPayloadSchema,
+      ImportJobDtoSchema.array()
+    );
+  }
+
+  public async transitionImportJob(
+    input: TransitionImportJobPayload
+  ): Promise<ImportJobTransitionResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.TRANSITION_IMPORT_JOB,
+      input,
+      TransitionImportJobPayloadSchema,
+      ImportJobTransitionResultSchema
+    );
+  }
+
+  public async requestImportStop(batchId: string): Promise<ImportBatchResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.REQUEST_IMPORT_STOP,
+      { batchId },
+      ImportBatchIdPayloadSchema,
+      ImportBatchResultSchema
+    );
+  }
+
+  public async reserveImportPhotoId(jobId: string): Promise<IdReservationResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.RESERVE_IMPORT_PHOTO_ID,
+      { jobId },
+      ImportJobIdPayloadSchema,
+      IdReservationResultSchema
+    );
+  }
+
+  public async commitImportPhotoId(jobId: string): Promise<IdReservationResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.COMMIT_IMPORT_PHOTO_ID,
+      { jobId },
+      ImportJobIdPayloadSchema,
+      IdReservationResultSchema
+    );
+  }
+
+  public async abandonImportPhotoId(jobId: string): Promise<IdReservationResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.ABANDON_IMPORT_PHOTO_ID,
+      { jobId },
+      ImportJobIdPayloadSchema,
+      IdReservationResultSchema
+    );
+  }
+
+  public async createOperationJournalIntent(
+    input: CreateJournalIntentPayload
+  ): Promise<JournalResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.CREATE_OPERATION_JOURNAL_INTENT,
+      input,
+      CreateJournalIntentPayloadSchema,
+      JournalResultSchema
+    );
+  }
+
+  public async transitionOperationJournal(
+    input: TransitionJournalPayload
+  ): Promise<JournalResult> {
+    return this.sendValidatedRequest(
+      CatalogRequestType.TRANSITION_OPERATION_JOURNAL,
+      input,
+      TransitionJournalPayloadSchema,
+      JournalResultSchema
     );
   }
 

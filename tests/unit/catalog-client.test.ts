@@ -290,6 +290,83 @@ describe('CatalogClient', () => {
     expect(requestIds.size).toBe(10);
   });
 
+  it('sends M2A import foundations only through explicit validated catalog operations', async () => {
+    const client = new CatalogClient();
+    client.start();
+    const messageHandler = mockOn.mock.calls.find((call) => call[0] === 'message')?.[1];
+    const batchId = '00000000-0000-4000-8000-000000000100';
+    const jobId = '00000000-0000-4000-8000-000000000101';
+    const batch = {
+      batchId,
+      snapshotAt: '2026-09-20T12:00:00.000Z',
+      requestedStopAt: null,
+      state: 'queued' as const,
+      totalCount: 1,
+      completedCount: 0,
+      failedCount: 0,
+      waitingCount: 0,
+      createdAt: '2026-09-20T12:00:00.000Z',
+      updatedAt: '2026-09-20T12:00:00.000Z',
+    };
+    const job = {
+      jobId,
+      batchId,
+      ordinal: 0,
+      originalFilename: 'cat.jpg',
+      sourceRelativePath: 'Inbox/cat.jpg',
+      currentRelativePath: 'Inbox/cat.jpg',
+      detectedFormat: null,
+      state: 'queued' as const,
+      phase: 'discovered' as const,
+      sourceSizeBytes: null,
+      sourceMtimeNs: null,
+      sourceSha256Hex: null,
+      candidateWidth: null,
+      candidateHeight: null,
+      candidateOrientation: null,
+      possibleDuplicateId: null,
+      stagedMetadataJson: '{}',
+      retryCount: 0,
+      errorClass: null,
+      errorCode: null,
+      errorDetailJson: '{}',
+      createdAt: '2026-09-20T12:00:00.000Z',
+      updatedAt: '2026-09-20T12:00:00.000Z',
+      completedAt: null,
+    };
+    const pending = client.createImportBatch({
+      batchId,
+      snapshotAt: batch.snapshotAt,
+      entries: [{
+        jobId,
+        ordinal: 0,
+        originalFilename: 'cat.jpg',
+        sourceRelativePath: 'Inbox/cat.jpg',
+      }],
+    });
+    const sent = mockPostMessage.mock.calls.at(-1)?.[0];
+    expect(sent).toMatchObject({
+      type: 'imports.createBatch',
+      payload: { batchId, entries: [{ jobId, sourceRelativePath: 'Inbox/cat.jpg' }] },
+    });
+    messageHandler({
+      requestId: sent.requestId,
+      success: true,
+      result: { batch, jobs: [job], catalogRevision: 1 },
+    });
+    await expect(pending).resolves.toEqual({ batch, jobs: [job], catalogRevision: 1 });
+    await expect(client.createImportBatch({
+      batchId,
+      snapshotAt: batch.snapshotAt,
+      entries: [{
+        jobId,
+        ordinal: 0,
+        originalFilename: 'cat.jpg',
+        sourceRelativePath: 'C:/outside/cat.jpg',
+      }],
+    })).rejects.toThrow();
+  });
+
   it('rejects invalid M1E1 input before posting to the utility process', async () => {
     const client = new CatalogClient();
     client.start();
